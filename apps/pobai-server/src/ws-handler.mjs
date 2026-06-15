@@ -20,18 +20,22 @@ export function createWsHandler({ openRouterApiKey, poe2McpTools, localTools }) 
 
     wss.handleUpgrade(request, socket, head, (ws) => {
       ws.on("message", async (raw) => {
-        let parsed;
         try {
-          parsed = JSON.parse(raw.toString());
-        } catch {
-          ws.send(JSON.stringify({ type: "error", message: "Invalid message format" }));
-          return;
-        }
+          let parsed;
+          try {
+            parsed = JSON.parse(raw.toString());
+          } catch {
+            ws.send(JSON.stringify({ type: "error", message: "Invalid message format" }));
+            return;
+          }
 
-        if (parsed.type === "chat") {
-          await handleChat(ws, parsed, { openRouterApiKey, getToolDefs, localTools, poe2McpTools: opts.poe2McpTools });
-        } else if (parsed.type === "tool_result") {
-          // results are picked up by waitForToolResults via its own listener
+          if (parsed.type === "chat") {
+            await handleChat(ws, parsed, { openRouterApiKey, getToolDefs, localTools, poe2McpTools: opts.poe2McpTools });
+          } else if (parsed.type === "tool_result") {
+            // handled by waitForToolResults listener
+          }
+        } catch (err) {
+          ws.send(JSON.stringify({ type: "error", message: err.message || "Internal error" }));
         }
       });
     });
@@ -96,6 +100,8 @@ async function handleChat(ws, { message, buildId }, { openRouterApiKey, getToolD
       return;
     }
   }
+
+  ws.send(JSON.stringify({ type: "error", message: "Tool loop exceeded maximum iterations" }));
 }
 
 function handleDemoLoop(ws, messages, { localTools, poe2McpTools }) {
