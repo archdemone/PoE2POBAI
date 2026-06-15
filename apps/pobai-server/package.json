@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "start": "node dist/index.js"
+    "dev": "node src/index.mjs",
+    "build": "echo 'No build step — server runs as ESM directly'",
+    "start": "node src/index.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@pobai/protocol": "file:../../packages/pobai-protocol",
@@ -20,6 +20,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.5",
     "@types/node": "^24.10.1",
-    "tsx": "^4.20.6"
+    "tsx": "^4.20.6",
+    "vitest": "^3.2.4"
   }
 }

@@ -80,7 +80,7 @@ function BuildList({
 
 function App() {
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("openai/gpt-4o-mini");
+  const [model, setModel] = useState("deepseek/deepseek-chat-v3-5");
   const [source, setSource] = useState("pob-code");
   const [label, setLabel] = useState("");
   const [payload, setPayload] = useState("");
@@ -219,7 +219,7 @@ function App() {
             <input
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="openai/gpt-4o-mini"
+              placeholder="deepseek/deepseek-chat-v3-5"
             />
           </label>
         </div>

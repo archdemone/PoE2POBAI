@@ -5,7 +5,8 @@ import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const port = Number(process.env.POBAI_SERVER_PORT ?? 3001);
+// PORT is set by Render/Railway; POBAI_SERVER_PORT is the local dev override
+const port = Number(process.env.PORT ?? process.env.POBAI_SERVER_PORT ?? 3001);
 const host = process.env.POBAI_SERVER_HOST ?? "0.0.0.0";
 const openRouterBaseUrl = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1";
 const webRoot = resolve(fileURLToPath(new URL("../../pobai-web", import.meta.url)));
