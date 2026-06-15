@@ -396,6 +396,150 @@ function buildEvidence(snapshot, question = "") {
   };
 }
 
+const TOOL_DEFINITIONS = [
+  {
+    type: "function",
+    function: {
+      name: "list_builds",
+      description: "List all imported PoB2 builds in this session.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_build_summary",
+      description: "Get a complete summary of an imported build: character, skills, items, defenses, and passive tree.",
+      parameters: {
+        type: "object",
+        properties: {
+          snapshot_id: { type: "string", description: "The snapshot ID from list_builds or the import response." },
+        },
+        required: ["snapshot_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_skills",
+      description: "Get all skill groups and gems from an imported build.",
+      parameters: {
+        type: "object",
+        properties: {
+          snapshot_id: { type: "string", description: "The snapshot ID." },
+        },
+        required: ["snapshot_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_items",
+      description: "Get equipped items from an imported build. Optionally filter by slot name.",
+      parameters: {
+        type: "object",
+        properties: {
+          snapshot_id: { type: "string", description: "The snapshot ID." },
+          slot: { type: "string", description: "Optional slot filter (e.g. 'Weapon 1', 'Helm'). Case-insensitive partial match." },
+        },
+        required: ["snapshot_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_defenses",
+      description: "Get defense statistics from an imported build: life, energy shield, resistances, armour, evasion, block.",
+      parameters: {
+        type: "object",
+        properties: {
+          snapshot_id: { type: "string", description: "The snapshot ID." },
+        },
+        required: ["snapshot_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_passive_tree",
+      description: "Get passive tree info for an imported build. Returns tree URL, version, node count, and all allocated node IDs (usable with poe2-mcp inspect_passive_node).",
+      parameters: {
+        type: "object",
+        properties: {
+          snapshot_id: { type: "string", description: "The snapshot ID." },
+        },
+        required: ["snapshot_id"],
+      },
+    },
+  },
+];
+
+function executeTool(name, args) {
+  if (name === "list_builds") {
+    return [...snapshots.values()]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((s) => ({
+        snapshot_id: s.id,
+        label: s.label,
+        source: s.source,
+        created_at: s.createdAt,
+        character: s.summary?.character ?? {},
+      }));
+  }
+
+  const snap = args?.snapshot_id ? snapshots.get(args.snapshot_id) : undefined;
+
+  if (name === "get_build_summary") {
+    if (!snap) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
+    return {
+      snapshot_id: snap.id,
+      label: snap.label,
+      character: snap.summary.character,
+      skills: snap.summary.skills,
+      items: snap.summary.items,
+      defenses: snap.summary.defenses,
+      passive_tree: snap.summary.passiveTree,
+      detected_terms: snap.summary.detectedTerms,
+      warnings: snap.summary.warnings,
+    };
+  }
+
+  if (name === "get_skills") {
+    if (!snap) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
+    return { skills: snap.summary.skills };
+  }
+
+  if (name === "get_items") {
+    if (!snap) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
+    const items = args?.slot
+      ? snap.summary.items.filter((i) => i.slot?.toLowerCase().includes(args.slot.toLowerCase()))
+      : snap.summary.items;
+    return { items, slot_filter: args?.slot ?? null };
+  }
+
+  if (name === "get_defenses") {
+    if (!snap) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
+    return {
+      defenses: snap.summary.defenses,
+      note: Object.keys(snap.summary.defenses).length === 0
+        ? "No defense stats in XML — exact values require PoB2 calculation bridge."
+        : "Extracted from PoB2 XML. Exact eHP/mitigation needs PoB2 calculation bridge.",
+      warnings: snap.summary.warnings.filter((w) => w.includes("defense")),
+    };
+  }
+
+  if (name === "get_passive_tree") {
+    if (!snap) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
+    return snap.summary.passiveTree;
+  }
+
+  return { error: `Unknown tool: ${name}` };
+}
+
 async function serveStatic(request, response, url) {
   let requestedPath = decodeURIComponent(url.pathname);
   if (requestedPath === "/") requestedPath = "/index.html";
@@ -480,15 +624,6 @@ async function handleApi(request, response, url) {
     return;
   }
 
-  if (request.method === "GET" && url.pathname === "/api/mcp/tools") {
-    sendJson(response, 200, {
-      connected: false,
-      tools: [],
-      note: "MCP client wiring is intentionally stubbed in v0.2.0; poe2-mcp integration is the next milestone.",
-    });
-    return;
-  }
-
   if (request.method === "POST" && url.pathname === "/api/chat") {
     const body = await readJson(request);
     const error = validateChatPayload(body);
@@ -497,57 +632,114 @@ async function handleApi(request, response, url) {
       return;
     }
 
-    const snapshot = body.snapshotId ? snapshots.get(body.snapshotId) : undefined;
-    const latestUserMessage = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
-    const evidence = buildEvidence(snapshot, latestUserMessage);
-    const systemContext = [
-      "You are PoBAI, a Path of Exile 2 build assistant.",
-      "You must be honest about data provenance.",
-      "Never invent exact DPS, eHP, resistance caps, conversion percentages, ailment chances, or mitigation numbers.",
-      "Use the imported snapshot context below only as extracted facts. If exact PoB/MCP calculations are unavailable, say so and give next-step guidance.",
-      buildSnapshotContext(snapshot),
-    ].join("\n");
+    const latestUserMessage = [...body.messages].reverse().find((m) => m.role === "user")?.content ?? "";
 
-    if (!body.apiKey || typeof body.apiKey !== "string") {
+    // Demo mode — no API key: execute tools directly and return formatted response
+    if (!body.apiKey || !body.apiKey.trim()) {
+      const snapshot = body.snapshotId ? snapshots.get(body.snapshotId) : undefined;
+      const toolTrace = [];
+      if (snapshot) {
+        const defResult = executeTool("get_defenses", { snapshot_id: snapshot.id });
+        toolTrace.push({ tool: "get_defenses", args: { snapshot_id: snapshot.id }, result: defResult });
+        const skillResult = executeTool("get_skills", { snapshot_id: snapshot.id });
+        toolTrace.push({ tool: "get_skills", args: { snapshot_id: snapshot.id }, result: skillResult });
+      } else {
+        const listResult = executeTool("list_builds", {});
+        toolTrace.push({ tool: "list_builds", args: {}, result: listResult });
+      }
       sendJson(response, 200, {
         message: {
           id: randomUUID(),
           role: "assistant",
           createdAt: new Date().toISOString(),
           content: buildLocalDemoResponse(snapshot, latestUserMessage),
-          evidence,
+          toolTrace,
         },
       });
       return;
     }
 
-    const openRouterResponse = await fetch(`${openRouterBaseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${body.apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER ?? `http://localhost:${port}`,
-        "X-OpenRouter-Title": "PoBAI Local Proof of Concept",
-      },
-      body: JSON.stringify({
-        model: body.model,
-        messages: [{ role: "system", content: systemContext }, ...body.messages],
-      }),
-    });
+    // Live mode — tool-use loop with the configured LLM
+    const systemPrompt = [
+      "You are PoBAI, a Path of Exile 2 build advisor.",
+      "You have tools to inspect imported PoB2 builds. Use them to get real data before answering.",
+      "Always call the relevant tool first — never invent exact numbers like DPS, eHP, or resistance values.",
+      "If no build is imported yet, call list_builds, then tell the user to import one.",
+      "Be concise and precise. Focus on what the data shows and what the player can act on.",
+    ].join("\n");
 
-    if (!openRouterResponse.ok) {
-      sendJson(response, openRouterResponse.status, { error: "OpenRouter request failed", detail: await openRouterResponse.text() });
-      return;
+    const conversationMessages = [{ role: "system", content: systemPrompt }, ...body.messages];
+    const toolTrace = [];
+    let remainingIter = 8;
+
+    while (remainingIter-- > 0) {
+      let llmResponse;
+      try {
+        llmResponse = await fetch(`${openRouterBaseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${body.apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER ?? `http://localhost:${port}`,
+            "X-Title": "PoBAI",
+          },
+          body: JSON.stringify({
+            model: body.model,
+            messages: conversationMessages,
+            tools: TOOL_DEFINITIONS,
+            tool_choice: "auto",
+          }),
+        });
+      } catch (fetchError) {
+        sendJson(response, 502, { error: "Could not reach LLM API", detail: fetchError instanceof Error ? fetchError.message : String(fetchError) });
+        return;
+      }
+
+      if (!llmResponse.ok) {
+        sendJson(response, llmResponse.status, { error: "LLM request failed", detail: await llmResponse.text() });
+        return;
+      }
+
+      const data = await llmResponse.json();
+      const choice = data.choices?.[0];
+      if (!choice) {
+        sendJson(response, 500, { error: "LLM returned no choices" });
+        return;
+      }
+
+      const assistantMsg = choice.message;
+
+      if (choice.finish_reason === "tool_calls" || assistantMsg.tool_calls?.length > 0) {
+        conversationMessages.push(assistantMsg);
+        for (const toolCall of assistantMsg.tool_calls ?? []) {
+          let toolArgs;
+          try { toolArgs = JSON.parse(toolCall.function.arguments ?? "{}"); } catch { toolArgs = {}; }
+
+          const toolResult = executeTool(toolCall.function.name, toolArgs);
+          toolTrace.push({ tool: toolCall.function.name, args: toolArgs, result: toolResult });
+          conversationMessages.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify(toolResult) });
+        }
+      } else {
+        sendJson(response, 200, {
+          message: {
+            id: randomUUID(),
+            role: "assistant",
+            content: assistantMsg.content ?? "No response.",
+            createdAt: new Date().toISOString(),
+            toolTrace,
+          },
+        });
+        return;
+      }
     }
 
-    const data = await openRouterResponse.json();
     sendJson(response, 200, {
       message: {
         id: randomUUID(),
         role: "assistant",
-        content: data.choices?.[0]?.message?.content ?? "OpenRouter returned an empty response.",
+        content: "I hit the tool call limit without reaching a final answer. Try asking a more specific question.",
         createdAt: new Date().toISOString(),
-        evidence,
+        toolTrace,
       },
     });
     return;

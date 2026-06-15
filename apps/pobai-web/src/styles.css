@@ -75,6 +75,35 @@ h2 { margin-top: 0; }
 .message p { margin-bottom: 0; }
 .composer { display: grid; gap: 1rem; grid-template-columns: 1fr auto; margin-top: 1rem; }
 .composer textarea { min-height: 88px; }
+.msg-role { color: #a8957c; font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.message.loading { opacity: 0.6; }
+
+.tool-trace {
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid #2f4a3e;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  margin-top: 0.75rem;
+  padding: 0.55rem 0.8rem;
+}
+.tool-trace summary {
+  color: #7eb89a;
+  cursor: pointer;
+  font-weight: 700;
+  list-style: none;
+  user-select: none;
+}
+.tool-trace summary::-webkit-details-marker { display: none; }
+.tool-trace summary::before { content: "⚙ "; }
+.tool-call {
+  border-top: 1px solid #253d31;
+  color: #a8957c;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+}
+.tool-call strong { color: #7eb89a; }
+.tool-args { color: #5a6e63; margin-left: 0.4rem; }
 
 @media (max-width: 800px) {
   .app-shell { padding: 1rem; }
