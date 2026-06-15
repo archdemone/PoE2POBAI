@@ -1,0 +1,21 @@
+{
+  "_comment": "Add this to your claude_desktop_config.json (merge with existing mcpServers block).",
+  "mcpServers": {
+    "pob-assistant": {
+      "_comment": "Our server: offline PoB build parsing and snapshot storage.",
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/PoE2POBAI/apps/pob-mcp-server/dist/index.js"],
+      "env": {
+        "POBAI_DATA_DIR": "/ABSOLUTE/PATH/TO/PoE2POBAI/data/snapshots"
+      }
+    },
+    "poe2-mcp": {
+      "_comment": "HivemindOverlord/poe2-mcp: game knowledge, DPS calc, gem DB, trade, poe.ninja. Install: pip install poe2-mcp",
+      "command": "poe2-mcp",
+      "args": [],
+      "env": {
+        "POE_ACCOUNT_NAME": "your-poe-account-name"
+      }
+    }
+  }
+}
