@@ -1,5 +1,10 @@
 node_modules/
 dist/
+
+# Web UI build output — rebuilt by `npm start` / start.bat locally and by CI
+# (deploy.yml) for GitHub Pages. Committing it caused stale-base-path blank pages.
+docs/
+
 .env
 .env.*
 !.env.example

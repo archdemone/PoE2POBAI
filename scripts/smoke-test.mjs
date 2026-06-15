@@ -22,8 +22,8 @@ async function expectOk(label, promise) {
 }
 
 const health = await expectOk("health", fetch(`${baseUrl}/health`));
-if (!health.ok || !health.dependencyFree) {
-  throw new Error("Health response did not report dependency-free server mode.");
+if (!health.ok || health.service !== "pobai-server") {
+  throw new Error("Health response did not report a healthy pobai-server.");
 }
 
 const imported = await expectOk("snapshot import", fetch(`${baseUrl}/api/build/import`, {
