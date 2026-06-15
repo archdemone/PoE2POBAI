@@ -1,11 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import { inflateSync, inflateRawSync } from "node:zlib";
 import { createReadStream, existsSync } from "node:fs";
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Poe2McpClient } from "./poe2-mcp-client.mjs";
+import { resolveToXml, ImportError } from "./import-resolver.mjs";
 
 // PORT is set by Render/Railway; POBAI_SERVER_PORT is the local dev override
 const port = Number(process.env.PORT ?? process.env.POBAI_SERVER_PORT ?? 3001);
@@ -183,127 +183,6 @@ function inferPayloadKind(payload) {
   if (/^\s*</.test(payload) && /PathOfBuilding/i.test(payload)) return "pob-xml";
   if (/^https?:\/\//i.test(payload)) return "url";
   return "opaque-code";
-}
-
-/** Thrown when an import payload can't be resolved; carries a user-facing message. */
-class ImportError extends Error {}
-
-// PoB export codes are URL-safe base64 of zlib-compressed XML.
-// Try zlib (RFC 1950) first, then raw deflate as a fallback.
-function decodePobCode(code) {
-  const normalized = code.trim().replace(/-/g, "+").replace(/_/g, "/");
-  const buf = Buffer.from(normalized, "base64");
-  try {
-    return inflateSync(buf).toString("utf8");
-  } catch {
-    return inflateRawSync(buf).toString("utf8");
-  }
-}
-
-function looksLikePobXml(text) {
-  return /^\s*</.test(text) && /PathOfBuilding/i.test(text);
-}
-
-function looksLikeUrl(text) {
-  return /^https?:\/\//i.test(text.trim());
-}
-
-// Pull the longest decodable PoB code out of arbitrary text (e.g. an HTML page).
-function extractEmbeddedPobXml(text) {
-  const candidates = text.match(/[A-Za-z0-9\-_+/=]{120,}/g);
-  if (!candidates) return null;
-  candidates.sort((a, b) => b.length - a.length);
-  for (const candidate of candidates) {
-    try {
-      const xml = decodePobCode(candidate);
-      if (looksLikePobXml(xml)) return xml;
-    } catch { /* try the next candidate */ }
-  }
-  return null;
-}
-
-// Map known build-share hosts to the endpoint that returns the raw PoB code.
-function toRawBuildUrl(rawUrl) {
-  let parsed;
-  try {
-    parsed = new URL(rawUrl);
-  } catch {
-    return rawUrl;
-  }
-  const host = parsed.hostname.replace(/^www\./, "");
-  const path = parsed.pathname.replace(/\/+$/, "");
-  if (host === "pobb.in" && !/\/raw$/.test(path)) {
-    const id = path.replace(/^\/+/, "");
-    if (id) return `https://pobb.in/${id}/raw`;
-  }
-  if (host === "pastebin.com") {
-    const match = path.match(/^\/(?:raw\/)?([A-Za-z0-9]+)$/);
-    if (match) return `https://pastebin.com/raw/${match[1]}`;
-  }
-  return parsed.toString();
-}
-
-async function fetchBuildUrl(url) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
-  try {
-    const res = await fetch(url, {
-      redirect: "follow",
-      signal: controller.signal,
-      headers: { "user-agent": "PoBAI/0.3", accept: "text/plain, application/xml, text/html, */*" },
-    });
-    if (!res.ok) throw new ImportError(`The build URL returned HTTP ${res.status}.`);
-    return await res.text();
-  } catch (err) {
-    if (err instanceof ImportError) throw err;
-    const reason = err?.name === "AbortError" ? "the request timed out" : err?.message ?? "unknown error";
-    throw new ImportError(`Could not fetch the build URL (${reason}).`);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/**
- * Resolve any supported import payload to PoB2 XML, fetching URLs and
- * decompressing export codes as needed. Returns { xml, note? }; throws
- * ImportError with a user-facing message when it can't be resolved.
- */
-async function resolveToXml(rawPayload) {
-  const payload = rawPayload.trim();
-
-  // 1. Raw PoB2 XML — use as-is.
-  if (looksLikePobXml(payload)) return { xml: payload };
-
-  // 2. Build URL — fetch and resolve its contents.
-  if (looksLikeUrl(payload)) {
-    const fetchUrl = toRawBuildUrl(payload);
-    const body = (await fetchBuildUrl(fetchUrl)).trim();
-    if (looksLikePobXml(body)) return { xml: body, note: `Imported XML from ${fetchUrl}` };
-    if (!looksLikeUrl(body) && !body.startsWith("<")) {
-      try {
-        const xml = decodePobCode(body);
-        if (looksLikePobXml(xml)) return { xml, note: `Imported PoB code from ${fetchUrl}` };
-      } catch { /* fall through to embedded scan */ }
-    }
-    const embedded = extractEmbeddedPobXml(body);
-    if (embedded) return { xml: embedded, note: `Extracted embedded PoB code from ${fetchUrl}` };
-    throw new ImportError(
-      "Fetched the URL but found no Path of Building code in it. " +
-      'poe.ninja build pages load their data dynamically — open the build, use "Copy" / "Export to Path of Building", ' +
-      "and paste that code here instead. Direct pobb.in and pastebin links work."
-    );
-  }
-
-  // 3. Opaque text — try to decompress it as a PoB export code.
-  try {
-    const xml = decodePobCode(payload);
-    if (looksLikePobXml(xml)) return { xml };
-  } catch { /* fall through */ }
-
-  throw new ImportError(
-    "This doesn't look like a PoB2 export code, XML, or a build URL. " +
-    'In Path of Building 2 use Import/Export → "Generate" to copy an export code, then paste it here.'
-  );
 }
 
 function parseBuildSummary(payload, source) {
@@ -778,7 +657,7 @@ async function handleApi(request, response, url) {
     const rawPayload = body.payload.replace(/\r\n/g, "\n").trim();
     let resolved;
     try {
-      resolved = await resolveToXml(rawPayload);
+      resolved = await resolveToXml(rawPayload, { mcp: poe2Mcp });
     } catch (err) {
       if (err instanceof ImportError) {
         sendJson(response, 422, { error: err.message });

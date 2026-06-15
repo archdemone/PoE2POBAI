@@ -178,7 +178,7 @@ function ImportModal({
         <h1 className="modal-title">PoBAI</h1>
         <p className="modal-desc">
           Paste your build to get started. Accepts a PoB2 export code, raw XML,
-          or a build link (pobb.in, pastebin).
+          or a build link (poe.ninja, pobb.in, pastebin).
         </p>
 
         <textarea
@@ -187,7 +187,7 @@ function ImportModal({
           value={paste}
           onChange={(e) => setPaste(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={"Paste a PoB2 export code, raw XML, or pobb.in / pastebin link here…\n\nCtrl+Enter to load"}
+          placeholder={"Paste a PoB2 export code, raw XML, or a build link (poe.ninja / pobb.in / pastebin)…\n\nCtrl+Enter to load"}
           rows={5}
         />
 
@@ -518,7 +518,7 @@ function App() {
                 <textarea
                   value={inlinePaste}
                   onChange={(e) => setInlinePaste(e.target.value)}
-                  placeholder="Paste a PoB code, XML, or pobb.in / pastebin link…"
+                  placeholder="Paste a PoB code, XML, or build link (poe.ninja / pobb.in / pastebin)…"
                   rows={4}
                 />
                 <input
