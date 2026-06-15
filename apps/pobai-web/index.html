@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PoBAI</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Path of Building 2 AI assistant</p>
+          <h1>PoBAI proof of concept</h1>
+          <p>
+            Import a fresh PoB2 snapshot, optionally connect an OpenRouter model, and chat with a build-mechanics assistant.
+            This version runs with plain Node.js and does not require npm install.
+          </p>
+        </div>
+        <div class="status-card">
+          <span>Status</span>
+          <strong id="status">Ready</strong>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <h2>1. Model</h2>
+          <p class="muted">Leave the API key empty to use local demo mode.</p>
+          <label>
+            OpenRouter API key
+            <input id="apiKey" type="password" placeholder="sk-or-..." autocomplete="off" />
+          </label>
+          <label>
+            Model slug
+            <input id="model" value="openai/gpt-4o-mini" placeholder="openai/gpt-4o-mini" />
+          </label>
+        </div>
+
+        <div class="panel">
+          <h2>2. Build snapshot</h2>
+          <div class="row">
+            <label>
+              Source
+              <select id="source">
+                <option value="pob-code">PoB code</option>
+                <option value="pob-xml">PoB XML</option>
+                <option value="poe-ninja">poe.ninja URL</option>
+                <option value="ggg-profile">GGG profile</option>
+              </select>
+            </label>
+            <label>
+              Label
+              <input id="label" placeholder="Twister Deadeye import" />
+            </label>
+          </div>
+          <label>
+            Import XML/text file
+            <input id="fileInput" type="file" accept=".xml,.txt,.pob,.json,text/xml,text/plain,application/xml" />
+          </label>
+          <textarea id="payload" placeholder="Paste PoB XML export, PoB code, or URL here"></textarea>
+          <div class="button-row">
+            <button id="importButton">Import immutable snapshot</button>
+            <button id="sampleButton" class="secondary" type="button">Load sample XML</button>
+          </div>
+          <div id="snapshotList" class="snapshot-list"></div>
+          <div id="snapshot" class="snapshot hidden"></div>
+          <p id="noSnapshot" class="muted">No snapshot imported yet.</p>
+          <div id="summary" class="summary hidden"></div>
+        </div>
+      </section>
+
+      <section class="panel chat-panel">
+        <h2>3. Chat</h2>
+        <div id="chatLog" class="chat-log">
+          <p class="muted">Ask a build-mechanics question after importing a snapshot.</p>
+        </div>
+        <div class="composer">
+          <textarea id="draft" placeholder="Ask PoBAI about your build...">What can you tell me about this build snapshot?</textarea>
+          <button id="sendButton">Send</button>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
