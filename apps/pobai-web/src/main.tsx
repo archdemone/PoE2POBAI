@@ -43,6 +43,17 @@ function detectSource(text: string): string {
   return "pob-code";
 }
 
+/** Extract the server's `{ error }` message from a failed response. */
+async function readError(res: Response): Promise<string> {
+  try {
+    const data = await res.json() as { error?: string };
+    if (data && typeof data.error === "string") return data.error;
+    return JSON.stringify(data);
+  } catch {
+    return res.statusText || `Request failed (${res.status})`;
+  }
+}
+
 // ── Sub-components ───────────────────────────────────────────────────────────
 
 function ToolTrace({ calls }: { calls: ToolCall[] }) {
@@ -142,8 +153,7 @@ function ImportModal({
         }),
       });
       if (!res.ok) {
-        const text = await res.text();
-        setError(text);
+        setError(await readError(res));
         return;
       }
       const data = await res.json() as { snapshot: SnapshotWithSummary };
@@ -167,8 +177,8 @@ function ImportModal({
         </p>
         <h1 className="modal-title">PoBAI</h1>
         <p className="modal-desc">
-          Paste your build to get started. Accepts PoB2 export code, raw XML,
-          or a poe.ninja URL.
+          Paste your build to get started. Accepts a PoB2 export code, raw XML,
+          or a build link (pobb.in, pastebin).
         </p>
 
         <textarea
@@ -177,7 +187,7 @@ function ImportModal({
           value={paste}
           onChange={(e) => setPaste(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={"Paste PoB2 export code, XML, or poe.ninja URL here…\n\nCtrl+Enter to load"}
+          placeholder={"Paste a PoB2 export code, raw XML, or pobb.in / pastebin link here…\n\nCtrl+Enter to load"}
           rows={5}
         />
 
@@ -365,7 +375,7 @@ function App() {
           payload: inlinePaste.trim(),
         }),
       });
-      if (!res.ok) { setStatus(`Import failed: ${await res.text()}`); return; }
+      if (!res.ok) { setStatus(`Import failed: ${await readError(res)}`); return; }
       const data = await res.json() as { snapshot: SnapshotWithSummary };
       setSnapshot(data.snapshot);
       setInlinePaste("");
@@ -404,7 +414,7 @@ function App() {
           messages: nextMessages.map(({ role, content }) => ({ role, content })),
         }),
       });
-      if (!res.ok) { setStatus(`Chat failed: ${await res.text()}`); return; }
+      if (!res.ok) { setStatus(`Chat failed: ${await readError(res)}`); return; }
       const data = await res.json() as { message: ChatMessageWithTrace };
       setMessages([...nextMessages, data.message]);
       setStatus("Ready");
@@ -508,7 +518,7 @@ function App() {
                 <textarea
                   value={inlinePaste}
                   onChange={(e) => setInlinePaste(e.target.value)}
-                  placeholder="Paste PoB code, XML, or poe.ninja URL…"
+                  placeholder="Paste a PoB code, XML, or pobb.in / pastebin link…"
                   rows={4}
                 />
                 <input
