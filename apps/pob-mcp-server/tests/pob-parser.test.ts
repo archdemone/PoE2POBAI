@@ -143,6 +143,11 @@ describe("parseBuildXml — passive tree", () => {
     const summary = parseBuildXml(SAMPLE_XML);
     expect(summary.passiveTree.allocatedNodeCount).toBe(3);
   });
+
+  it("extracts allocated node IDs for poe2-mcp handoff", () => {
+    const summary = parseBuildXml(SAMPLE_XML);
+    expect(summary.passiveTree.allocatedNodeIds).toEqual(["101", "202", "303"]);
+  });
 });
 
 describe("parseBuildXml — detected terms", () => {

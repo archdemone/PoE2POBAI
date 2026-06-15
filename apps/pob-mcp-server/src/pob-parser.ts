@@ -36,6 +36,8 @@ export interface ParsedPassiveTree {
   url?: string;
   treeVersion?: string;
   allocatedNodeCount?: number;
+  /** Raw node IDs — pass these to poe2-mcp's inspect_passive_node for full details. */
+  allocatedNodeIds?: string[];
 }
 
 export interface BuildSummary {
@@ -199,10 +201,14 @@ export function parseBuildXml(xml: string): BuildSummary {
 
   const tree = firstTagAttrs(xml, "Tree");
   const treeSpec = firstTagAttrs(xml, "Spec");
+  const nodeIds = collectTagAttrs(xml, "Node")
+    .map((n) => n["id"] ?? n["nodeId"])
+    .filter((id): id is string => Boolean(id));
   summary.passiveTree = {
     url: compact(textFromTag(xml, "URL") || tree["url"]),
     treeVersion: compact(tree["treeVersion"] || treeSpec["treeVersion"]),
-    allocatedNodeCount: collectTagAttrs(xml, "Node").length || undefined,
+    allocatedNodeCount: nodeIds.length || undefined,
+    allocatedNodeIds: nodeIds.length > 0 ? nodeIds : undefined,
   };
 
   const lower = xml.toLowerCase();

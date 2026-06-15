@@ -207,7 +207,8 @@ server.tool(
 
 server.tool(
   "get_passive_tree",
-  "Get passive skill tree info for an imported build (tree URL, version, allocated node count).",
+  "Get passive skill tree info for an imported build (tree URL, version, allocated node count, and all allocated node IDs). " +
+    "Use the returned node IDs with poe2-mcp's inspect_passive_node tool for full node details.",
   {
     snapshot_id: z
       .string()
