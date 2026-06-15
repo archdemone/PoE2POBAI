@@ -6,6 +6,7 @@ import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Poe2McpClient } from "./poe2-mcp-client.mjs";
 import { resolveToXml, ImportError } from "./import-resolver.mjs";
+import { createWsHandler } from "./ws-handler.mjs";
 
 // PORT is set by Render/Railway; POBAI_SERVER_PORT is the local dev override
 const port = Number(process.env.PORT ?? process.env.POBAI_SERVER_PORT ?? 3001);
@@ -855,14 +856,70 @@ const server = createServer(async (request, response) => {
   }
 });
 
+const localTools = [
+  {
+    name: "get_build_summary",
+    description: "Get a full summary of an imported build",
+    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" } }, required: ["snapshot_id"] },
+  },
+  {
+    name: "get_skills",
+    description: "Get all skill groups and their gems",
+    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" } }, required: ["snapshot_id"] },
+  },
+  {
+    name: "get_items",
+    description: "Get equipped items, optionally filtered by slot",
+    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" }, slot: { type: "string" } }, required: ["snapshot_id"] },
+  },
+  {
+    name: "get_passive_tree",
+    description: "Get passive tree info",
+    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" } }, required: ["snapshot_id"] },
+  },
+  {
+    name: "get_defenses",
+    description: "Get defense statistics",
+    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" } }, required: ["snapshot_id"] },
+  },
+  {
+    name: "list_builds",
+    description: "List all imported builds",
+    inputSchema: { type: "object", properties: {} },
+  },
+];
+
+const wsHandler = createWsHandler({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY || null,
+  poe2McpTools: [],
+  localTools,
+});
+
+server.on("upgrade", (request, socket, head) => {
+  if (request.url === "/ws") {
+    wsHandler(request, socket, head);
+  } else {
+    socket.destroy();
+  }
+});
+
 await loadSnapshotsFromDisk();
 
-// Connect to poe2-mcp in background — server starts immediately regardless.
-// Launched as a Python module by default; see poe2-mcp-client.mjs for overrides.
-poe2Mcp.connect().catch(() => {});
-
-server.listen(port, host, () => {
-  console.log(`PoBAI server listening on http://${host}:${port}`);
-  console.log(`Loaded ${snapshots.size} persisted snapshot(s) from ${dataRoot}`);
-  console.log(`Open the app at http://localhost:${port}`);
+server.listen(port, host, async () => {
+  console.log(`pobai-server listening on http://${host}:${port}`);
+  try {
+    await poe2Mcp.connect();
+    const toolNames = poe2Mcp.toolNames;
+    wsHandler._poe2McpTools = toolNames.map((name) => ({
+      type: "function",
+      function: {
+        name,
+        description: `poe2-mcp: ${name}`,
+        parameters: { type: "object", properties: {} },
+      },
+    }));
+    console.log(`poe2-mcp connected: ${toolNames.length} tools`);
+  } catch (e) {
+    console.log("poe2-mcp not available, continuing without bridge tools");
+  }
 });
