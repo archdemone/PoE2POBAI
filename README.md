@@ -42,5 +42,6 @@ PoBAI treats imported builds as immutable snapshots. If you manually change a bu
 
 1. Connect the server to `poe2-mcp` and list available MCP tools.
 2. Call PoE2 mechanics/wiki/support-gem validation tools from chat.
-3. Add PoB code/XML parsing through MCP rather than storing only metadata.
+3. Add PoB code decompression/import through MCP rather than parsing XML only.
 4. Add PoB2 Lua bridge integration under `integrations/pob2-addon`.
+5. Add experimental snapshot clone/diff/revert flows for safe recommendations.
