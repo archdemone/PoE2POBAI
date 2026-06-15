@@ -3,13 +3,17 @@ import { WebSocketServer } from "ws";
 const MAX_TOOL_ITERATIONS = 8;
 
 export function createWsHandler({ openRouterApiKey, poe2McpTools, localTools }) {
-  const toolDefs = [
-    ...(localTools || []).map((t) => ({
-      type: "function",
-      function: { name: t.name, description: t.description, parameters: t.inputSchema },
-    })),
-    ...(poe2McpTools || []),
-  ];
+  const opts = { openRouterApiKey, poe2McpTools: poe2McpTools || [], localTools };
+
+  function getToolDefs() {
+    return [
+      ...(opts.localTools || []).map((t) => ({
+        type: "function",
+        function: { name: t.name, description: t.description, parameters: t.inputSchema },
+      })),
+      ...(opts.poe2McpTools || []),
+    ];
+  }
 
   return function handleUpgrade(request, socket, head) {
     const wss = new WebSocketServer({ noServer: true });
@@ -25,16 +29,16 @@ export function createWsHandler({ openRouterApiKey, poe2McpTools, localTools }) 
         }
 
         if (parsed.type === "chat") {
-          await handleChat(ws, parsed, { openRouterApiKey, toolDefs, localTools, poe2McpTools });
+          await handleChat(ws, parsed, { openRouterApiKey, getToolDefs, localTools, poe2McpTools: opts.poe2McpTools });
         } else if (parsed.type === "tool_result") {
-          ws._pendingToolResults = parsed.results;
+          // results are picked up by waitForToolResults via its own listener
         }
       });
     });
   };
 }
 
-async function handleChat(ws, { message, buildId }, { openRouterApiKey, toolDefs, localTools, poe2McpTools }) {
+async function handleChat(ws, { message, buildId }, { openRouterApiKey, getToolDefs, localTools, poe2McpTools }) {
   const messages = [
     {
       role: "system",
@@ -49,7 +53,7 @@ async function handleChat(ws, { message, buildId }, { openRouterApiKey, toolDefs
       return;
     }
 
-    const response = await callLLM(messages, toolDefs, openRouterApiKey);
+    const response = await callLLM(messages, getToolDefs(), openRouterApiKey);
 
     if (response.error) {
       ws.send(JSON.stringify({ type: "error", message: response.error }));

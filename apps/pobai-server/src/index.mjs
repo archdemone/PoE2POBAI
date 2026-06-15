@@ -889,9 +889,11 @@ const localTools = [
   },
 ];
 
+const poe2McpToolRefs = [];
+
 const wsHandler = createWsHandler({
   openRouterApiKey: process.env.OPENROUTER_API_KEY || null,
-  poe2McpTools: [],
+  poe2McpTools: poe2McpToolRefs,
   localTools,
 });
 
@@ -910,14 +912,16 @@ server.listen(port, host, async () => {
   try {
     await poe2Mcp.connect();
     const toolNames = poe2Mcp.toolNames;
-    wsHandler._poe2McpTools = toolNames.map((name) => ({
-      type: "function",
-      function: {
-        name,
-        description: `poe2-mcp: ${name}`,
-        parameters: { type: "object", properties: {} },
-      },
-    }));
+    for (const name of toolNames) {
+      poe2McpToolRefs.push({
+        type: "function",
+        function: {
+          name,
+          description: `poe2-mcp: ${name}`,
+          parameters: { type: "object", properties: {} },
+        },
+      });
+    }
     console.log(`poe2-mcp connected: ${toolNames.length} tools`);
   } catch (e) {
     console.log("poe2-mcp not available, continuing without bridge tools");
