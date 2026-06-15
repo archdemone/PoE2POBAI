@@ -12,7 +12,11 @@ const host = process.env.POBAI_SERVER_HOST ?? "0.0.0.0";
 const openRouterBaseUrl = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1";
 
 const poe2Mcp = new Poe2McpClient();
-const webRoot = resolve(fileURLToPath(new URL("../../pobai-web", import.meta.url)));
+// Serve from docs/ (production build) when available, otherwise apps/pobai-web/ (dev)
+const docsRoot = resolve(fileURLToPath(new URL("../../../docs", import.meta.url)));
+const webRoot = existsSync(join(docsRoot, "index.html"))
+  ? docsRoot
+  : resolve(fileURLToPath(new URL("../../pobai-web", import.meta.url)));
 const dataRoot = resolve(process.env.POBAI_DATA_DIR ?? fileURLToPath(new URL("../../../data/snapshots", import.meta.url)));
 const snapshots = new Map();
 const payloads = new Map();
