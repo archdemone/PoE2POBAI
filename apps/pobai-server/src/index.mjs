@@ -4,11 +4,14 @@ import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Poe2McpClient } from "./poe2-mcp-client.mjs";
 
 // PORT is set by Render/Railway; POBAI_SERVER_PORT is the local dev override
 const port = Number(process.env.PORT ?? process.env.POBAI_SERVER_PORT ?? 3001);
 const host = process.env.POBAI_SERVER_HOST ?? "0.0.0.0";
 const openRouterBaseUrl = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1";
+
+const poe2Mcp = new Poe2McpClient();
 const webRoot = resolve(fileURLToPath(new URL("../../pobai-web", import.meta.url)));
 const dataRoot = resolve(process.env.POBAI_DATA_DIR ?? fileURLToPath(new URL("../../../data/snapshots", import.meta.url)));
 const snapshots = new Map();
@@ -397,7 +400,17 @@ function buildEvidence(snapshot, question = "") {
   };
 }
 
-const TOOL_DEFINITIONS = [
+const LOCAL_TOOL_NAMES = new Set([
+  "list_builds", "get_build_summary", "get_skills",
+  "get_items", "get_defenses", "get_passive_tree",
+]);
+
+/** Merge our local tools with whatever poe2-mcp has connected. */
+function getToolDefinitions() {
+  return [...BASE_TOOL_DEFINITIONS, ...poe2Mcp.toLlmToolDefinitions()];
+}
+
+const BASE_TOOL_DEFINITIONS = [
   {
     type: "function",
     function: {
@@ -479,7 +492,7 @@ const TOOL_DEFINITIONS = [
   },
 ];
 
-function executeTool(name, args) {
+function executeLocalTool(name, args) {
   if (name === "list_builds") {
     return [...snapshots.values()]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -538,7 +551,24 @@ function executeTool(name, args) {
     return snap.summary.passiveTree;
   }
 
-  return { error: `Unknown tool: ${name}` };
+  return null; // not a local tool
+}
+
+async function executeTool(name, args) {
+  if (LOCAL_TOOL_NAMES.has(name)) {
+    return executeLocalTool(name, args);
+  }
+  if (poe2Mcp.ready) {
+    try {
+      return await poe2Mcp.callTool(name, args);
+    } catch (error) {
+      return { error: `poe2-mcp tool "${name}" failed: ${error.message}` };
+    }
+  }
+  return {
+    error: `Tool "${name}" requires poe2-mcp which is not connected. ` +
+      `Install with: pip install poe2-mcp, then restart the PoBAI server.`,
+  };
 }
 
 async function serveStatic(request, response, url) {
@@ -564,7 +594,22 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "GET" && url.pathname === "/health") {
-    sendJson(response, 200, { ok: true, service: "pobai-server", version: "0.2.0", dependencyFree: true });
+    sendJson(response, 200, { ok: true, service: "pobai-server", version: "0.3.0" });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/status") {
+    sendJson(response, 200, {
+      ok: true,
+      buildsLoaded: snapshots.size,
+      poe2Mcp: {
+        connected: poe2Mcp.ready,
+        toolCount: poe2Mcp.tools.length,
+        tools: poe2Mcp.toolNames,
+      },
+      localTools: [...LOCAL_TOOL_NAMES],
+      allTools: [...LOCAL_TOOL_NAMES, ...poe2Mcp.toolNames],
+    });
     return;
   }
 
@@ -640,12 +685,12 @@ async function handleApi(request, response, url) {
       const snapshot = body.snapshotId ? snapshots.get(body.snapshotId) : undefined;
       const toolTrace = [];
       if (snapshot) {
-        const defResult = executeTool("get_defenses", { snapshot_id: snapshot.id });
+        const defResult = await executeTool("get_defenses", { snapshot_id: snapshot.id });
         toolTrace.push({ tool: "get_defenses", args: { snapshot_id: snapshot.id }, result: defResult });
-        const skillResult = executeTool("get_skills", { snapshot_id: snapshot.id });
+        const skillResult = await executeTool("get_skills", { snapshot_id: snapshot.id });
         toolTrace.push({ tool: "get_skills", args: { snapshot_id: snapshot.id }, result: skillResult });
       } else {
-        const listResult = executeTool("list_builds", {});
+        const listResult = await executeTool("list_builds", {});
         toolTrace.push({ tool: "list_builds", args: {}, result: listResult });
       }
       sendJson(response, 200, {
@@ -661,12 +706,40 @@ async function handleApi(request, response, url) {
     }
 
     // Live mode — tool-use loop with the configured LLM
+    const poe2McpStatus = poe2Mcp.ready
+      ? `poe2-mcp is CONNECTED with ${poe2Mcp.tools.length} live game tools: ${poe2Mcp.toolNames.slice(0, 8).join(", ")}...`
+      : "poe2-mcp is NOT connected (pip install poe2-mcp needed). You only have the 6 local PoB parse tools.";
+
     const systemPrompt = [
-      "You are PoBAI, a Path of Exile 2 build advisor.",
-      "You have tools to inspect imported PoB2 builds. Use them to get real data before answering.",
-      "Always call the relevant tool first — never invent exact numbers like DPS, eHP, or resistance values.",
-      "If no build is imported yet, call list_builds, then tell the user to import one.",
-      "Be concise and precise. Focus on what the data shows and what the player can act on.",
+      "You are PoBAI, a Path of Exile 2 build advisor with direct access to the player's imported build data and live game knowledge tools.",
+      "",
+      `Tool status: ${poe2McpStatus}`,
+      "",
+      "## Workflow for EVERY new conversation:",
+      "1. Call get_build_summary(snapshot_id) first to load the player's build. The snapshot_id comes from the user context or list_builds.",
+      "2. Briefly confirm what you found: character name, class, ascendancy, level, key skills, passive node count.",
+      "3. Only then answer the user's question using real tool data.",
+      "",
+      "## For damage questions (e.g. 'what does my Twister do?', 'how much DPS?'):",
+      "1. get_skills → identify the skill and all socketed support gems.",
+      "2. get_items → find gear affecting that skill (weapon, body armour, helmet enchants).",
+      "3. get_passive_tree → get passive node IDs; if poe2-mcp is connected, call inspect_passive_node on relevant keystone/notable IDs.",
+      "4. If poe2-mcp connected: inspect_spell_gem(skill_name) for base mechanics, then calculate_character_dps for actual numbers.",
+      "5. Report exact values with sources. Never estimate DPS without tool data.",
+      "",
+      "## For optimization requests (e.g. 'balance Trinity resonance', 'improve my DPS'):",
+      "1. First understand the current state completely (skills, supports, passives, gear).",
+      "2. Identify the specific constraint (e.g. Trinity needs equal fire/cold/lightning added damage).",
+      "3. If poe2-mcp connected: try alternatives — swap gems, recalculate, compare. Show before/after.",
+      "4. If poe2-mcp not connected: explain what changes to make and why, but flag that you can't recalculate without poe2-mcp.",
+      "5. Give concrete, actionable recommendations: exact gem names, passive nodes to allocate/deallocate, specific items to target.",
+      "",
+      "## Rules:",
+      "- NEVER invent DPS numbers, resistance percentages, or mechanic interactions — always use tool data.",
+      "- If poe2-mcp tools would give a better answer but aren't connected, say so clearly.",
+      "- Be specific: name exact gems, nodes by name, items by name and mod values.",
+      "- For multi-step optimization, show your reasoning step by step.",
+      "- If the player asks about a mechanic you're unsure of, say so rather than guessing.",
     ].join("\n");
 
     const conversationMessages = [{ role: "system", content: systemPrompt }, ...body.messages];
@@ -687,7 +760,7 @@ async function handleApi(request, response, url) {
           body: JSON.stringify({
             model: body.model,
             messages: conversationMessages,
-            tools: TOOL_DEFINITIONS,
+            tools: getToolDefinitions(),
             tool_choice: "auto",
           }),
         });
@@ -716,7 +789,7 @@ async function handleApi(request, response, url) {
           let toolArgs;
           try { toolArgs = JSON.parse(toolCall.function.arguments ?? "{}"); } catch { toolArgs = {}; }
 
-          const toolResult = executeTool(toolCall.function.name, toolArgs);
+          const toolResult = await executeTool(toolCall.function.name, toolArgs);
           toolTrace.push({ tool: toolCall.function.name, args: toolArgs, result: toolResult });
           conversationMessages.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify(toolResult) });
         }
@@ -764,8 +837,12 @@ const server = createServer(async (request, response) => {
 
 await loadSnapshotsFromDisk();
 
+// Connect to poe2-mcp in background — server starts immediately regardless
+// TODO when home: pip install poe2-mcp, then restart the server to activate live game tools
+poe2Mcp.connect().catch(() => {});
+
 server.listen(port, host, () => {
-  console.log(`PoBAI dependency-free server listening on http://${host}:${port}`);
+  console.log(`PoBAI server listening on http://${host}:${port}`);
   console.log(`Loaded ${snapshots.size} persisted snapshot(s) from ${dataRoot}`);
   console.log(`Open the app at http://localhost:${port}`);
 });

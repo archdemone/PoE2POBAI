@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
     "@pobai/protocol": "file:../../packages/pobai-protocol",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
