@@ -82,7 +82,21 @@ npm run dev   # Vite @ 5173, HTTP server @ 3001
 POBAI_SERVER_PORT=3001
 POBAI_DATA_DIR=/path/to/data/snapshots   # shared between MCP server and HTTP server
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+
+# poe2-mcp bridge (optional live game tools — DPS/eHP formulas, gem/passive/mod data, poe.ninja import)
+POE2_MCP_COMMAND=py            # executable to launch poe2-mcp (default: `py` on Windows, else `python3`)
+POE2_MCP_ARGS="-m src.mcp_server"  # args (default runs it as a module; the pip console script often isn't on PATH)
+POE2_MCP_DISABLED=1            # set to skip the bridge entirely
+# poe2-mcp requires SECRET_KEY and ENCRYPTION_KEY; if unset, random per-launch values are used.
 ```
+
+### poe2-mcp bridge
+
+`pip install poe2-mcp` adds ~32 live PoE2 tools (gem/support/passive/mod/base-item data,
+mechanic explanations, poe.ninja character + URL import) that merge into the chat tool-use
+loop alongside the local PoB tools. The server connects automatically on startup and runs fine
+without it — check `GET /api/status` for `poe2Mcp.connected`. poe2-mcp follows a "data layer"
+design: it supplies data and formulas; the LLM does the DPS/eHP math.
 
 ## Snapshot model
 
@@ -91,6 +105,6 @@ All builds are stored as immutable snapshots. Re-import from PoB2 to pick up cha
 ## What's next
 
 1. PoB2 Lua bridge — live DPS/eHP calculations rather than XML-only stats.
-2. `poe2-mcp` integration — character data, support validation, top-build comparison.
+2. ~~`poe2-mcp` integration~~ — **done**: connects on startup, merges ~32 live tools into the chat loop (see above).
 3. Wire the web UI chat to USE MCP tools in a tool-use loop (Option B).
 4. Snapshot clone/diff for safe what-if recommendations.

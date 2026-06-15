@@ -114,6 +114,7 @@ beforeAll(async () => {
       POBAI_SERVER_PORT: String(pobaiPort),
       OPENROUTER_BASE_URL: `http://localhost:${mockLLMPort}`,
       POBAI_DATA_DIR: dataDir,
+      POE2_MCP_DISABLED: "1", // keep the loop test hermetic — no real poe2-mcp child
     },
     stdio: "pipe",
   });

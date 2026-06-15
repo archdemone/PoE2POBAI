@@ -863,9 +863,9 @@ async function handleApi(request, response, url) {
       "## For damage questions (e.g. 'what does my Twister do?', 'how much DPS?'):",
       "1. get_skills → identify the skill and all socketed support gems.",
       "2. get_items → find gear affecting that skill (weapon, body armour, helmet enchants).",
-      "3. get_passive_tree → get passive node IDs; if poe2-mcp is connected, call inspect_passive_node on relevant keystone/notable IDs.",
-      "4. If poe2-mcp connected: inspect_spell_gem(skill_name) for base mechanics, then calculate_character_dps for actual numbers.",
-      "5. Report exact values with sources. Never estimate DPS without tool data.",
+      "3. get_passive_tree → get passive node IDs; if poe2-mcp is connected, call analyze_passive_tree(node_ids) or inspect_passive_node / inspect_keystone for relevant nodes.",
+      "4. If poe2-mcp connected: inspect_spell_gem(spell_name) and inspect_support_gem(support_name) for base values and tags, and validate_support_combination to confirm the links are legal. poe2-mcp is a DATA layer — it has no single 'calculate DPS' tool.",
+      "5. Compute DPS/eHP yourself from those base values using PoE2 mechanics (use explain_mechanic for exact interactions). Show your inputs and the math; never invent numbers without tool data.",
       "",
       "## For optimization requests (e.g. 'balance Trinity resonance', 'improve my DPS'):",
       "1. First understand the current state completely (skills, supports, passives, gear).",
@@ -876,6 +876,7 @@ async function handleApi(request, response, url) {
       "",
       "## Rules:",
       "- NEVER invent DPS numbers, resistance percentages, or mechanic interactions — always use tool data.",
+      "- If the user gives a poe.ninja profile URL (or an account + character name) and poe2-mcp is connected, use import_poe_ninja_url or analyze_character to pull their live build.",
       "- If poe2-mcp tools would give a better answer but aren't connected, say so clearly.",
       "- Be specific: name exact gems, nodes by name, items by name and mod values.",
       "- For multi-step optimization, show your reasoning step by step.",
@@ -977,8 +978,8 @@ const server = createServer(async (request, response) => {
 
 await loadSnapshotsFromDisk();
 
-// Connect to poe2-mcp in background — server starts immediately regardless
-// TODO when home: pip install poe2-mcp, then restart the server to activate live game tools
+// Connect to poe2-mcp in background — server starts immediately regardless.
+// Launched as a Python module by default; see poe2-mcp-client.mjs for overrides.
 poe2Mcp.connect().catch(() => {});
 
 server.listen(port, host, () => {
