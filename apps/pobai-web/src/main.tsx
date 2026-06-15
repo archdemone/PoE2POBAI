@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect, useState } from "react";
+import React, { useMemo, useRef, useEffect, useState, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import type { BuildSnapshot, ChatMessage } from "@pobai/protocol";
 import "./styles.css";
@@ -13,6 +13,15 @@ interface ToolCall {
 
 interface ChatMessageWithTrace extends ChatMessage {
   toolTrace?: ToolCall[];
+}
+
+// Minimal parsed character info returned by the server (extends base snapshot)
+interface SnapshotWithSummary extends BuildSnapshot {
+  summary?: {
+    character?: { className?: string; ascendancy?: string; level?: string };
+    skills?: { label?: string }[];
+    warnings?: string[];
+  };
 }
 
 function ToolTrace({ calls }: { calls: ToolCall[] }) {
@@ -32,13 +41,51 @@ function ToolTrace({ calls }: { calls: ToolCall[] }) {
   );
 }
 
+function BuildList({
+  snapshots,
+  selected,
+  onSelect,
+  onRefresh,
+}: {
+  snapshots: SnapshotWithSummary[];
+  selected: SnapshotWithSummary | null;
+  onSelect: (s: SnapshotWithSummary) => void;
+  onRefresh: () => void;
+}) {
+  if (snapshots.length === 0) return null;
+  return (
+    <div className="build-list">
+      <div className="build-list-header">
+        <span>Saved builds ({snapshots.length})</span>
+        <button className="btn-icon" onClick={onRefresh} title="Refresh build list">↻</button>
+      </div>
+      {snapshots.map((s) => {
+        const char = s.summary?.character;
+        const label = [char?.className, char?.ascendancy, char?.level ? `lvl ${char.level}` : ""]
+          .filter(Boolean).join(" · ") || s.source;
+        return (
+          <button
+            key={s.id}
+            className={`build-row${s.id === selected?.id ? " selected" : ""}`}
+            onClick={() => onSelect(s)}
+          >
+            <span className="build-name">{s.label}</span>
+            <span className="build-meta">{label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function App() {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("openai/gpt-4o-mini");
   const [source, setSource] = useState("pob-code");
   const [label, setLabel] = useState("");
   const [payload, setPayload] = useState("");
-  const [snapshot, setSnapshot] = useState<BuildSnapshot | null>(null);
+  const [snapshots, setSnapshots] = useState<SnapshotWithSummary[]>([]);
+  const [snapshot, setSnapshot] = useState<SnapshotWithSummary | null>(null);
   const [messages, setMessages] = useState<ChatMessageWithTrace[]>([]);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState("Ready");
@@ -51,6 +98,29 @@ function App() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const fetchSnapshots = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/build/current`);
+      if (!res.ok) return;
+      const data = await res.json() as { snapshots: SnapshotWithSummary[] };
+      setSnapshots(data.snapshots ?? []);
+    } catch {}
+  }, []);
+
+  // Load build list on mount and auto-refresh every 5s (picks up watcher imports)
+  useEffect(() => {
+    fetchSnapshots();
+    const id = setInterval(fetchSnapshots, 5000);
+    return () => clearInterval(id);
+  }, [fetchSnapshots]);
+
+  // When snapshot list updates, auto-select newest if nothing is selected yet
+  useEffect(() => {
+    if (!snapshot && snapshots.length > 0) {
+      setSnapshot(snapshots[0]!);
+    }
+  }, [snapshots, snapshot]);
+
   async function importBuild() {
     if (!payload.trim()) return;
     setStatus("Importing…");
@@ -61,9 +131,12 @@ function App() {
         body: JSON.stringify({ source, label: label.trim() || undefined, payload: payload.trim() }),
       });
       if (!res.ok) { setStatus(`Import failed: ${await res.text()}`); return; }
-      const data = await res.json() as { snapshot: BuildSnapshot };
+      const data = await res.json() as { snapshot: SnapshotWithSummary };
       setSnapshot(data.snapshot);
-      setStatus("Build imported — ready to chat.");
+      setPayload("");
+      setLabel("");
+      setStatus("Build imported.");
+      await fetchSnapshots();
     } catch (e) {
       setStatus(`Import error: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -116,9 +189,11 @@ function App() {
           <p className="eyebrow">Path of Building 2 · AI build advisor</p>
           <h1>PoBAI</h1>
           <p>
-            Import a PoB2 build, then ask questions. The assistant calls build tools to get real data before answering —
-            no invented numbers.{" "}
-            {!apiKey.trim() && <span className="muted">Add an OpenRouter key to use a live model. Demo mode works without one.</span>}
+            Import a PoB2 build, then ask questions. The assistant calls build tools to get
+            real data before answering — no invented numbers.{" "}
+            {!apiKey.trim() && (
+              <span className="muted">Demo mode active — add an OpenRouter key for a live model.</span>
+            )}
           </p>
         </div>
         <div className="status-card">
@@ -131,7 +206,7 @@ function App() {
         <div className="panel">
           <h2>1. Model</h2>
           <label>
-            OpenRouter API key <span className="muted">(optional — demo mode works without)</span>
+            OpenRouter API key <span className="muted">(optional)</span>
             <input
               type="password"
               value={apiKey}
@@ -178,22 +253,42 @@ function App() {
           <button onClick={importBuild} disabled={!payload.trim()}>
             Import build
           </button>
-          {snapshot ? (
+
+          <BuildList
+            snapshots={snapshots}
+            selected={snapshot}
+            onSelect={(s) => { setSnapshot(s); setMessages([]); }}
+            onRefresh={fetchSnapshots}
+          />
+
+          {snapshot && (
             <div className="snapshot">
               <strong>{snapshot.label}</strong>
-              <span>{snapshot.source} · {snapshot.sizeBytes.toLocaleString()} bytes · #{snapshot.hash.slice(0, 10)}</span>
+              <span>
+                {[
+                  snapshot.summary?.character?.className,
+                  snapshot.summary?.character?.ascendancy,
+                  snapshot.summary?.character?.level
+                    ? `lvl ${snapshot.summary.character.level}`
+                    : undefined,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || snapshot.source}
+              </span>
             </div>
-          ) : (
-            <p className="muted">No build imported yet.</p>
           )}
         </div>
       </section>
 
       <section className="panel chat-panel">
-        <h2>3. Chat</h2>
+        <h2>3. Chat{snapshot ? ` — ${snapshot.label}` : ""}</h2>
         <div className="chat-log">
           {messages.length === 0 && (
-            <p className="muted">Import a build above, then ask a question — e.g. "Why are my defenses low?" or "What supports would improve Twister?"</p>
+            <p className="muted">
+              {snapshot
+                ? `Ask about "${snapshot.label}" — e.g. "Why are my defenses low?" or "What supports should I use?"`
+                : "Select or import a build above, then ask a question."}
+            </p>
           )}
           {messages.map((msg) => (
             <article key={msg.id} className={`message ${msg.role}`}>
