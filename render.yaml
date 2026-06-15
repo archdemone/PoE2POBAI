@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: pobai-server
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install
+    startCommand: node apps/pobai-server/src/index.mjs
+    envVars:
+      - key: PORT
+        generateValue: false
+      - key: POBAI_DATA_DIR
+        value: /tmp/pobai-data
+      - key: OPENROUTER_HTTP_REFERER
+        value: https://archdemone.github.io/PoE2POBAI/

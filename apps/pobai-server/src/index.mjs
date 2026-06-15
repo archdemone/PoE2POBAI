@@ -1,14 +1,23 @@
 import { createHash, randomUUID } from "node:crypto";
+import { inflateSync, inflateRawSync } from "node:zlib";
 import { createReadStream, existsSync } from "node:fs";
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Poe2McpClient } from "./poe2-mcp-client.mjs";
 
-const port = Number(process.env.POBAI_SERVER_PORT ?? 3001);
+// PORT is set by Render/Railway; POBAI_SERVER_PORT is the local dev override
+const port = Number(process.env.PORT ?? process.env.POBAI_SERVER_PORT ?? 3001);
 const host = process.env.POBAI_SERVER_HOST ?? "0.0.0.0";
 const openRouterBaseUrl = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1";
-const webRoot = resolve(fileURLToPath(new URL("../../pobai-web", import.meta.url)));
+
+const poe2Mcp = new Poe2McpClient();
+// Serve from docs/ (production build) when available, otherwise apps/pobai-web/ (dev)
+const docsRoot = resolve(fileURLToPath(new URL("../../../docs", import.meta.url)));
+const webRoot = existsSync(join(docsRoot, "index.html"))
+  ? docsRoot
+  : resolve(fileURLToPath(new URL("../../pobai-web", import.meta.url)));
 const dataRoot = resolve(process.env.POBAI_DATA_DIR ?? fileURLToPath(new URL("../../../data/snapshots", import.meta.url)));
 const snapshots = new Map();
 const payloads = new Map();
@@ -174,6 +183,127 @@ function inferPayloadKind(payload) {
   if (/^\s*</.test(payload) && /PathOfBuilding/i.test(payload)) return "pob-xml";
   if (/^https?:\/\//i.test(payload)) return "url";
   return "opaque-code";
+}
+
+/** Thrown when an import payload can't be resolved; carries a user-facing message. */
+class ImportError extends Error {}
+
+// PoB export codes are URL-safe base64 of zlib-compressed XML.
+// Try zlib (RFC 1950) first, then raw deflate as a fallback.
+function decodePobCode(code) {
+  const normalized = code.trim().replace(/-/g, "+").replace(/_/g, "/");
+  const buf = Buffer.from(normalized, "base64");
+  try {
+    return inflateSync(buf).toString("utf8");
+  } catch {
+    return inflateRawSync(buf).toString("utf8");
+  }
+}
+
+function looksLikePobXml(text) {
+  return /^\s*</.test(text) && /PathOfBuilding/i.test(text);
+}
+
+function looksLikeUrl(text) {
+  return /^https?:\/\//i.test(text.trim());
+}
+
+// Pull the longest decodable PoB code out of arbitrary text (e.g. an HTML page).
+function extractEmbeddedPobXml(text) {
+  const candidates = text.match(/[A-Za-z0-9\-_+/=]{120,}/g);
+  if (!candidates) return null;
+  candidates.sort((a, b) => b.length - a.length);
+  for (const candidate of candidates) {
+    try {
+      const xml = decodePobCode(candidate);
+      if (looksLikePobXml(xml)) return xml;
+    } catch { /* try the next candidate */ }
+  }
+  return null;
+}
+
+// Map known build-share hosts to the endpoint that returns the raw PoB code.
+function toRawBuildUrl(rawUrl) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return rawUrl;
+  }
+  const host = parsed.hostname.replace(/^www\./, "");
+  const path = parsed.pathname.replace(/\/+$/, "");
+  if (host === "pobb.in" && !/\/raw$/.test(path)) {
+    const id = path.replace(/^\/+/, "");
+    if (id) return `https://pobb.in/${id}/raw`;
+  }
+  if (host === "pastebin.com") {
+    const match = path.match(/^\/(?:raw\/)?([A-Za-z0-9]+)$/);
+    if (match) return `https://pastebin.com/raw/${match[1]}`;
+  }
+  return parsed.toString();
+}
+
+async function fetchBuildUrl(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      signal: controller.signal,
+      headers: { "user-agent": "PoBAI/0.3", accept: "text/plain, application/xml, text/html, */*" },
+    });
+    if (!res.ok) throw new ImportError(`The build URL returned HTTP ${res.status}.`);
+    return await res.text();
+  } catch (err) {
+    if (err instanceof ImportError) throw err;
+    const reason = err?.name === "AbortError" ? "the request timed out" : err?.message ?? "unknown error";
+    throw new ImportError(`Could not fetch the build URL (${reason}).`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Resolve any supported import payload to PoB2 XML, fetching URLs and
+ * decompressing export codes as needed. Returns { xml, note? }; throws
+ * ImportError with a user-facing message when it can't be resolved.
+ */
+async function resolveToXml(rawPayload) {
+  const payload = rawPayload.trim();
+
+  // 1. Raw PoB2 XML — use as-is.
+  if (looksLikePobXml(payload)) return { xml: payload };
+
+  // 2. Build URL — fetch and resolve its contents.
+  if (looksLikeUrl(payload)) {
+    const fetchUrl = toRawBuildUrl(payload);
+    const body = (await fetchBuildUrl(fetchUrl)).trim();
+    if (looksLikePobXml(body)) return { xml: body, note: `Imported XML from ${fetchUrl}` };
+    if (!looksLikeUrl(body) && !body.startsWith("<")) {
+      try {
+        const xml = decodePobCode(body);
+        if (looksLikePobXml(xml)) return { xml, note: `Imported PoB code from ${fetchUrl}` };
+      } catch { /* fall through to embedded scan */ }
+    }
+    const embedded = extractEmbeddedPobXml(body);
+    if (embedded) return { xml: embedded, note: `Extracted embedded PoB code from ${fetchUrl}` };
+    throw new ImportError(
+      "Fetched the URL but found no Path of Building code in it. " +
+      'poe.ninja build pages load their data dynamically — open the build, use "Copy" / "Export to Path of Building", ' +
+      "and paste that code here instead. Direct pobb.in and pastebin links work."
+    );
+  }
+
+  // 3. Opaque text — try to decompress it as a PoB export code.
+  try {
+    const xml = decodePobCode(payload);
+    if (looksLikePobXml(xml)) return { xml };
+  } catch { /* fall through */ }
+
+  throw new ImportError(
+    "This doesn't look like a PoB2 export code, XML, or a build URL. " +
+    'In Path of Building 2 use Import/Export → "Generate" to copy an export code, then paste it here.'
+  );
 }
 
 function parseBuildSummary(payload, source) {
@@ -396,6 +526,177 @@ function buildEvidence(snapshot, question = "") {
   };
 }
 
+const LOCAL_TOOL_NAMES = new Set([
+  "list_builds", "get_build_summary", "get_skills",
+  "get_items", "get_defenses", "get_passive_tree",
+]);
+
+/** Merge our local tools with whatever poe2-mcp has connected. */
+function getToolDefinitions() {
+  return [...BASE_TOOL_DEFINITIONS, ...poe2Mcp.toLlmToolDefinitions()];
+}
+
+const BASE_TOOL_DEFINITIONS = [
+  {
+    type: "function",
+    function: {
+      name: "list_builds",
+      description: "List all imported PoB2 builds in this session.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_build_summary",
+      description: "Get a complete summary of an imported build: character, skills, items, defenses, and passive tree.",
+      parameters: {
+        type: "object",
+        properties: {
+          snapshot_id: { type: "string", description: "The snapshot ID from list_builds or the import response." },
+        },
+        required: ["snapshot_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_skills",
+      description: "Get all skill groups and gems from an imported build.",
+      parameters: {
+        type: "object",
+        properties: {
+          snapshot_id: { type: "string", description: "The snapshot ID." },
+        },
+        required: ["snapshot_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_items",
+      description: "Get equipped items from an imported build. Optionally filter by slot name.",
+      parameters: {
+        type: "object",
+        properties: {
+          snapshot_id: { type: "string", description: "The snapshot ID." },
+          slot: { type: "string", description: "Optional slot filter (e.g. 'Weapon 1', 'Helm'). Case-insensitive partial match." },
+        },
+        required: ["snapshot_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_defenses",
+      description: "Get defense statistics from an imported build: life, energy shield, resistances, armour, evasion, block.",
+      parameters: {
+        type: "object",
+        properties: {
+          snapshot_id: { type: "string", description: "The snapshot ID." },
+        },
+        required: ["snapshot_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_passive_tree",
+      description: "Get passive tree info for an imported build. Returns tree URL, version, node count, and all allocated node IDs (usable with poe2-mcp inspect_passive_node).",
+      parameters: {
+        type: "object",
+        properties: {
+          snapshot_id: { type: "string", description: "The snapshot ID." },
+        },
+        required: ["snapshot_id"],
+      },
+    },
+  },
+];
+
+function executeLocalTool(name, args) {
+  if (name === "list_builds") {
+    return [...snapshots.values()]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((s) => ({
+        snapshot_id: s.id,
+        label: s.label,
+        source: s.source,
+        created_at: s.createdAt,
+        character: s.summary?.character ?? {},
+      }));
+  }
+
+  const snap = args?.snapshot_id ? snapshots.get(args.snapshot_id) : undefined;
+
+  if (name === "get_build_summary") {
+    if (!snap) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
+    return {
+      snapshot_id: snap.id,
+      label: snap.label,
+      character: snap.summary.character,
+      skills: snap.summary.skills,
+      items: snap.summary.items,
+      defenses: snap.summary.defenses,
+      passive_tree: snap.summary.passiveTree,
+      detected_terms: snap.summary.detectedTerms,
+      warnings: snap.summary.warnings,
+    };
+  }
+
+  if (name === "get_skills") {
+    if (!snap) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
+    return { skills: snap.summary.skills };
+  }
+
+  if (name === "get_items") {
+    if (!snap) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
+    const items = args?.slot
+      ? snap.summary.items.filter((i) => i.slot?.toLowerCase().includes(args.slot.toLowerCase()))
+      : snap.summary.items;
+    return { items, slot_filter: args?.slot ?? null };
+  }
+
+  if (name === "get_defenses") {
+    if (!snap) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
+    return {
+      defenses: snap.summary.defenses,
+      note: Object.keys(snap.summary.defenses).length === 0
+        ? "No defense stats in XML — exact values require PoB2 calculation bridge."
+        : "Extracted from PoB2 XML. Exact eHP/mitigation needs PoB2 calculation bridge.",
+      warnings: snap.summary.warnings.filter((w) => w.includes("defense")),
+    };
+  }
+
+  if (name === "get_passive_tree") {
+    if (!snap) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
+    return snap.summary.passiveTree;
+  }
+
+  return null; // not a local tool
+}
+
+async function executeTool(name, args) {
+  if (LOCAL_TOOL_NAMES.has(name)) {
+    return executeLocalTool(name, args);
+  }
+  if (poe2Mcp.ready) {
+    try {
+      return await poe2Mcp.callTool(name, args);
+    } catch (error) {
+      return { error: `poe2-mcp tool "${name}" failed: ${error.message}` };
+    }
+  }
+  return {
+    error: `Tool "${name}" requires poe2-mcp which is not connected. ` +
+      `Install with: pip install poe2-mcp, then restart the PoBAI server.`,
+  };
+}
+
 async function serveStatic(request, response, url) {
   let requestedPath = decodeURIComponent(url.pathname);
   if (requestedPath === "/") requestedPath = "/index.html";
@@ -419,7 +720,22 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "GET" && url.pathname === "/health") {
-    sendJson(response, 200, { ok: true, service: "pobai-server", version: "0.2.0", dependencyFree: true });
+    sendJson(response, 200, { ok: true, service: "pobai-server", version: "0.3.0" });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/status") {
+    sendJson(response, 200, {
+      ok: true,
+      buildsLoaded: snapshots.size,
+      poe2Mcp: {
+        connected: poe2Mcp.ready,
+        toolCount: poe2Mcp.tools.length,
+        tools: poe2Mcp.toolNames,
+      },
+      localTools: [...LOCAL_TOOL_NAMES],
+      allTools: [...LOCAL_TOOL_NAMES, ...poe2Mcp.toolNames],
+    });
     return;
   }
 
@@ -459,33 +775,38 @@ async function handleApi(request, response, url) {
       return;
     }
 
-    const normalizedPayload = body.payload.replace(/\r\n/g, "\n").trim();
-    const hash = createHash("sha256").update(normalizedPayload).digest("hex");
-    const summary = parseBuildSummary(normalizedPayload, body.source);
+    const rawPayload = body.payload.replace(/\r\n/g, "\n").trim();
+    let resolved;
+    try {
+      resolved = await resolveToXml(rawPayload);
+    } catch (err) {
+      if (err instanceof ImportError) {
+        sendJson(response, 422, { error: err.message });
+        return;
+      }
+      sendJson(response, 500, { error: err instanceof Error ? err.message : "Import failed." });
+      return;
+    }
+
+    const xml = resolved.xml;
+    const hash = createHash("sha256").update(xml).digest("hex");
+    const summary = parseBuildSummary(xml, body.source);
+    if (resolved.note) summary.resolvedFrom = resolved.note;
     const snapshot = {
       id: randomUUID(),
       source: body.source,
       createdAt: new Date().toISOString(),
       label: body.label?.trim() || `${body.source} snapshot ${new Date().toISOString()}`,
       hash,
-      sizeBytes: Buffer.byteLength(normalizedPayload, "utf8"),
-      preview: normalizedPayload.slice(0, 240),
+      sizeBytes: Buffer.byteLength(xml, "utf8"),
+      preview: xml.slice(0, 240),
       summary,
     };
 
     snapshots.set(snapshot.id, snapshot);
-    payloads.set(snapshot.id, normalizedPayload);
-    await persistSnapshot(snapshot, normalizedPayload);
+    payloads.set(snapshot.id, xml);
+    await persistSnapshot(snapshot, xml);
     sendJson(response, 201, { snapshot });
-    return;
-  }
-
-  if (request.method === "GET" && url.pathname === "/api/mcp/tools") {
-    sendJson(response, 200, {
-      connected: false,
-      tools: [],
-      note: "MCP client wiring is intentionally stubbed in v0.2.0; poe2-mcp integration is the next milestone.",
-    });
     return;
   }
 
@@ -497,57 +818,142 @@ async function handleApi(request, response, url) {
       return;
     }
 
-    const snapshot = body.snapshotId ? snapshots.get(body.snapshotId) : undefined;
-    const latestUserMessage = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
-    const evidence = buildEvidence(snapshot, latestUserMessage);
-    const systemContext = [
-      "You are PoBAI, a Path of Exile 2 build assistant.",
-      "You must be honest about data provenance.",
-      "Never invent exact DPS, eHP, resistance caps, conversion percentages, ailment chances, or mitigation numbers.",
-      "Use the imported snapshot context below only as extracted facts. If exact PoB/MCP calculations are unavailable, say so and give next-step guidance.",
-      buildSnapshotContext(snapshot),
-    ].join("\n");
+    const latestUserMessage = [...body.messages].reverse().find((m) => m.role === "user")?.content ?? "";
 
-    if (!body.apiKey || typeof body.apiKey !== "string") {
+    // Demo mode — no API key: execute tools directly and return formatted response
+    if (!body.apiKey || !body.apiKey.trim()) {
+      const snapshot = body.snapshotId ? snapshots.get(body.snapshotId) : undefined;
+      const toolTrace = [];
+      if (snapshot) {
+        const defResult = await executeTool("get_defenses", { snapshot_id: snapshot.id });
+        toolTrace.push({ tool: "get_defenses", args: { snapshot_id: snapshot.id }, result: defResult });
+        const skillResult = await executeTool("get_skills", { snapshot_id: snapshot.id });
+        toolTrace.push({ tool: "get_skills", args: { snapshot_id: snapshot.id }, result: skillResult });
+      } else {
+        const listResult = await executeTool("list_builds", {});
+        toolTrace.push({ tool: "list_builds", args: {}, result: listResult });
+      }
       sendJson(response, 200, {
         message: {
           id: randomUUID(),
           role: "assistant",
           createdAt: new Date().toISOString(),
           content: buildLocalDemoResponse(snapshot, latestUserMessage),
-          evidence,
+          toolTrace,
         },
       });
       return;
     }
 
-    const openRouterResponse = await fetch(`${openRouterBaseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${body.apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER ?? `http://localhost:${port}`,
-        "X-OpenRouter-Title": "PoBAI Local Proof of Concept",
-      },
-      body: JSON.stringify({
-        model: body.model,
-        messages: [{ role: "system", content: systemContext }, ...body.messages],
-      }),
-    });
+    // Live mode — tool-use loop with the configured LLM
+    const poe2McpStatus = poe2Mcp.ready
+      ? `poe2-mcp is CONNECTED with ${poe2Mcp.tools.length} live game tools: ${poe2Mcp.toolNames.slice(0, 8).join(", ")}...`
+      : "poe2-mcp is NOT connected (pip install poe2-mcp needed). You only have the 6 local PoB parse tools.";
 
-    if (!openRouterResponse.ok) {
-      sendJson(response, openRouterResponse.status, { error: "OpenRouter request failed", detail: await openRouterResponse.text() });
-      return;
+    const systemPrompt = [
+      "You are PoBAI, a Path of Exile 2 build advisor with direct access to the player's imported build data and live game knowledge tools.",
+      "",
+      `Tool status: ${poe2McpStatus}`,
+      "",
+      "## Workflow for EVERY new conversation:",
+      "1. Call get_build_summary(snapshot_id) first to load the player's build. The snapshot_id comes from the user context or list_builds.",
+      "2. Briefly confirm what you found: character name, class, ascendancy, level, key skills, passive node count.",
+      "3. Only then answer the user's question using real tool data.",
+      "",
+      "## For damage questions (e.g. 'what does my Twister do?', 'how much DPS?'):",
+      "1. get_skills → identify the skill and all socketed support gems.",
+      "2. get_items → find gear affecting that skill (weapon, body armour, helmet enchants).",
+      "3. get_passive_tree → get passive node IDs; if poe2-mcp is connected, call inspect_passive_node on relevant keystone/notable IDs.",
+      "4. If poe2-mcp connected: inspect_spell_gem(skill_name) for base mechanics, then calculate_character_dps for actual numbers.",
+      "5. Report exact values with sources. Never estimate DPS without tool data.",
+      "",
+      "## For optimization requests (e.g. 'balance Trinity resonance', 'improve my DPS'):",
+      "1. First understand the current state completely (skills, supports, passives, gear).",
+      "2. Identify the specific constraint (e.g. Trinity needs equal fire/cold/lightning added damage).",
+      "3. If poe2-mcp connected: try alternatives — swap gems, recalculate, compare. Show before/after.",
+      "4. If poe2-mcp not connected: explain what changes to make and why, but flag that you can't recalculate without poe2-mcp.",
+      "5. Give concrete, actionable recommendations: exact gem names, passive nodes to allocate/deallocate, specific items to target.",
+      "",
+      "## Rules:",
+      "- NEVER invent DPS numbers, resistance percentages, or mechanic interactions — always use tool data.",
+      "- If poe2-mcp tools would give a better answer but aren't connected, say so clearly.",
+      "- Be specific: name exact gems, nodes by name, items by name and mod values.",
+      "- For multi-step optimization, show your reasoning step by step.",
+      "- If the player asks about a mechanic you're unsure of, say so rather than guessing.",
+    ].join("\n");
+
+    const conversationMessages = [{ role: "system", content: systemPrompt }, ...body.messages];
+    const toolTrace = [];
+    let remainingIter = 8;
+
+    while (remainingIter-- > 0) {
+      let llmResponse;
+      try {
+        llmResponse = await fetch(`${openRouterBaseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${body.apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER ?? `http://localhost:${port}`,
+            "X-Title": "PoBAI",
+          },
+          body: JSON.stringify({
+            model: body.model,
+            messages: conversationMessages,
+            tools: getToolDefinitions(),
+            tool_choice: "auto",
+          }),
+        });
+      } catch (fetchError) {
+        sendJson(response, 502, { error: "Could not reach LLM API", detail: fetchError instanceof Error ? fetchError.message : String(fetchError) });
+        return;
+      }
+
+      if (!llmResponse.ok) {
+        sendJson(response, llmResponse.status, { error: "LLM request failed", detail: await llmResponse.text() });
+        return;
+      }
+
+      const data = await llmResponse.json();
+      const choice = data.choices?.[0];
+      if (!choice) {
+        sendJson(response, 500, { error: "LLM returned no choices" });
+        return;
+      }
+
+      const assistantMsg = choice.message;
+
+      if (choice.finish_reason === "tool_calls" || assistantMsg.tool_calls?.length > 0) {
+        conversationMessages.push(assistantMsg);
+        for (const toolCall of assistantMsg.tool_calls ?? []) {
+          let toolArgs;
+          try { toolArgs = JSON.parse(toolCall.function.arguments ?? "{}"); } catch { toolArgs = {}; }
+
+          const toolResult = await executeTool(toolCall.function.name, toolArgs);
+          toolTrace.push({ tool: toolCall.function.name, args: toolArgs, result: toolResult });
+          conversationMessages.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify(toolResult) });
+        }
+      } else {
+        sendJson(response, 200, {
+          message: {
+            id: randomUUID(),
+            role: "assistant",
+            content: assistantMsg.content ?? "No response.",
+            createdAt: new Date().toISOString(),
+            toolTrace,
+          },
+        });
+        return;
+      }
     }
 
-    const data = await openRouterResponse.json();
     sendJson(response, 200, {
       message: {
         id: randomUUID(),
         role: "assistant",
-        content: data.choices?.[0]?.message?.content ?? "OpenRouter returned an empty response.",
+        content: "I hit the tool call limit without reaching a final answer. Try asking a more specific question.",
         createdAt: new Date().toISOString(),
-        evidence,
+        toolTrace,
       },
     });
     return;
@@ -571,8 +977,12 @@ const server = createServer(async (request, response) => {
 
 await loadSnapshotsFromDisk();
 
+// Connect to poe2-mcp in background — server starts immediately regardless
+// TODO when home: pip install poe2-mcp, then restart the server to activate live game tools
+poe2Mcp.connect().catch(() => {});
+
 server.listen(port, host, () => {
-  console.log(`PoBAI dependency-free server listening on http://${host}:${port}`);
+  console.log(`PoBAI server listening on http://${host}:${port}`);
   console.log(`Loaded ${snapshots.size} persisted snapshot(s) from ${dataRoot}`);
   console.log(`Open the app at http://localhost:${port}`);
 });

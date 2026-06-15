@@ -1,21 +1,89 @@
 {
-  "_comment": "Add this to your claude_desktop_config.json (merge with existing mcpServers block).",
+  "_comment": "Merge this into your claude_desktop_config.json (merge the mcpServers block with any existing one).",
+  "_transport": "Both servers use stdio transport.",
+  "_handoff": "get_passive_tree returns allocatedNodeIds[] → pass each to poe2-mcp inspect_passive_node.",
   "mcpServers": {
     "pob-assistant": {
-      "_comment": "Our server: offline PoB build parsing and snapshot storage.",
+      "_comment": "PoBAI: offline PoB2 build parsing, snapshot storage, build inspection. Run: node dist/index.js",
       "command": "node",
       "args": ["/ABSOLUTE/PATH/TO/PoE2POBAI/apps/pob-mcp-server/dist/index.js"],
       "env": {
         "POBAI_DATA_DIR": "/ABSOLUTE/PATH/TO/PoE2POBAI/data/snapshots"
-      }
+      },
+      "_tools": [
+        "import_pob_build  — parse PoB2 base64 code or raw XML, returns snapshot_id",
+        "list_builds       — list all imported builds",
+        "get_build_summary — full character/skills/items/defenses/passive tree",
+        "get_skills        — skill groups with gem details",
+        "get_items         — items with optional slot filter",
+        "get_defenses      — life, ES, resistances, armour, evasion, block",
+        "get_passive_tree  — tree URL, version, allocatedNodeIds[] (for poe2-mcp handoff)",
+        "delete_build      — remove a build by snapshot_id"
+      ]
     },
     "poe2-mcp": {
-      "_comment": "HivemindOverlord/poe2-mcp: game knowledge, DPS calc, gem DB, trade, poe.ninja. Install: pip install poe2-mcp",
+      "_comment": "HivemindOverlord/poe2-mcp: 38 live PoE2 tools (gem DB, DPS calc, passive tree, trade). Install: pip install poe2-mcp",
       "command": "poe2-mcp",
       "args": [],
       "env": {
         "POE_ACCOUNT_NAME": "your-poe-account-name"
+      },
+      "_tool_categories": {
+        "character_analysis": [
+          "analyze_character       — full defensive/skill/gear/passive analysis",
+          "import_poe_ninja_url    — import from poe.ninja profile URL",
+          "compare_to_top_players  — benchmark against ladder leaders",
+          "analyze_passive_tree    — passive node analysis with pathfinding",
+          "calculate_character_dps — server-side DPS including DoT",
+          "get_live_game_state     — read running PoE2 client state",
+          "get_game_config         — local game configuration"
+        ],
+        "passive_tree": [
+          "inspect_passive_node    — KEY HANDOFF: call with node_id from our get_passive_tree.allocatedNodeIds[]",
+          "list_all_keystones",
+          "inspect_keystone",
+          "list_all_notables",
+          "check_tree_freshness"
+        ],
+        "gem_validation": [
+          "validate_support_combination — gem compatibility check",
+          "inspect_support_gem",
+          "inspect_spell_gem",
+          "list_all_supports",
+          "list_all_spells"
+        ],
+        "item_and_trade": [
+          "list_all_base_items",
+          "inspect_base_item",
+          "search_items",
+          "search_trade_items"
+        ],
+        "mods": [
+          "inspect_mod",
+          "list_all_mods",
+          "search_mods_by_stat",
+          "get_mod_tiers",
+          "validate_item_mods",
+          "get_available_mods"
+        ],
+        "knowledge": [
+          "explain_mechanic",
+          "find_stat_sources",
+          "get_formula"
+        ],
+        "pob_bridge": [
+          "import_pob",
+          "export_pob",
+          "get_pob_code"
+        ]
       }
     }
-  }
+  },
+  "_example_workflow": [
+    "1. import_pob_build(code='<PoB2 XML>') → {snapshot_id: 'abc123', ...}",
+    "2. get_passive_tree(snapshot_id='abc123') → {allocatedNodeIds: ['42857','58881',...], treeVersion: '2.1.0'}",
+    "3. [poe2-mcp] inspect_passive_node(node_id='42857') → {name: 'Entropy', stats: [...]}",
+    "4. [poe2-mcp] validate_support_combination(gems=['Twister','Trinity Support']) → {valid: true, ...}",
+    "5. [poe2-mcp] calculate_character_dps(...) → {dps: 1234567, ...}"
+  ]
 }

@@ -22,8 +22,8 @@ async function expectOk(label, promise) {
 }
 
 const health = await expectOk("health", fetch(`${baseUrl}/health`));
-if (!health.ok || !health.dependencyFree) {
-  throw new Error("Health response did not report dependency-free server mode.");
+if (!health.ok || health.service !== "pobai-server") {
+  throw new Error("Health response did not report a healthy pobai-server.");
 }
 
 const imported = await expectOk("snapshot import", fetch(`${baseUrl}/api/build/import`, {
@@ -73,11 +73,11 @@ const chat = await expectOk("demo chat", fetch(`${baseUrl}/api/chat`, {
 if (!chat.message?.content?.includes("Extracted defense-like stats")) {
   throw new Error("Demo chat did not return grounded defense response.");
 }
-if (chat.message?.evidence?.questionType !== "defense") {
-  throw new Error("Demo chat did not return defense evidence metadata.");
+if (chat.message?.toolTrace?.[0]?.tool !== "get_defenses") {
+  throw new Error("Demo chat did not execute get_defenses as first tool call.");
 }
-if (!chat.message?.evidence?.extracted?.some((value) => value.includes("Life=1450"))) {
-  throw new Error("Evidence metadata did not include extracted Life stat.");
+if (chat.message?.toolTrace?.[0]?.result?.defenses?.["Life"] !== "1450") {
+  throw new Error("Tool trace did not include extracted Life=1450 stat.");
 }
 
 const deleted = await expectOk("snapshot delete", fetch(`${baseUrl}/api/build/${imported.snapshot.id}`, { method: "DELETE" }));
