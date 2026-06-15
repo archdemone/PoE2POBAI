@@ -1,13 +1,22 @@
 {
   "name": "pobai",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "Dependency-free PoBAI proof-of-concept web assistant for Path of Building 2 snapshots.",
+  "description": "PoBAI proof-of-concept web assistant scaffold for Path of Building 2 snapshots.",
   "type": "module",
   "scripts": {
-    "dev": "node apps/pobai-server/src/index.mjs",
-    "start": "node apps/pobai-server/src/index.mjs",
-    "smoke": "node scripts/smoke-test.mjs"
+    "dev": "concurrently -n server,web -c blue,green \"npm run dev --workspace apps/pobai-server\" \"npm run dev --workspace apps/pobai-web\"",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=22"

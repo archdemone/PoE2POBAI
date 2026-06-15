@@ -2,21 +2,13 @@
 
 ## Findings
 
-- `HivemindOverlord/poe2-mcp` is the best first MCP candidate. Its README/search summary describes an MCP server for PoE2 character analysis and optimization, with tool coverage for character data, support validation, spell/support inspection, PoB import/export, top-player comparison, mechanics explanation, and a live PoB bridge.
+- `HivemindOverlord/poe2-mcp` is the best first MCP candidate. Its README describes an MCP server for PoE2 character analysis and optimization, with tool coverage for character data, support validation, spell/support inspection, PoB import/export, top-player comparison, and mechanics explanation.
 - `PathOfBuildingCommunity/PathOfBuilding-PoE2` is the canonical PoB2 desktop build planner target.
-- PoB2 is an offline build planner for Path of Exile 2 and remains the intended source of truth for exact calculations.
-- Search results and community discussion indicate PoB export payloads can be XML-like (`<PathOfBuilding2>...`), so a lightweight local XML parser is useful as an interim MVP before MCP/PoB integration.
+- The PoB2 releases page shows active releases and recent calculation/data fixes, so PoBAI should display tool/build data freshness once MCP is wired.
+- The browser-based PoB Web discussion confirms that running PoB2 Lua through WebAssembly is possible, but that is a larger later milestone than this scaffold.
 - OpenRouter exposes an OpenAI-compatible `/api/v1/chat/completions` endpoint, which fits the proof-of-concept provider abstraction.
-- The official MCP TypeScript SDK and PoE2 MCP projects remain future integration targets, but this environment currently blocks npm/GitHub/PyPI package installation from shell commands.
+- The official MCP TypeScript SDK supports Node.js clients and transports, which makes it suitable for a future TypeScript server-side MCP bridge.
 
-## Revised scaffold decision
+## Scaffold decision
 
-The implementation uses a dependency-free local Node.js server plus static browser assets. This is less fancy than a Vite/React scaffold, but it is directly runnable in this environment without npm registry access and remains easy to replace with a richer frontend later.
-
-## Grounding decision
-
-Until `poe2-mcp` or a PoB2 bridge is connected, PoBAI only treats parsed XML as extracted facts. Exact build math must be labeled unavailable rather than guessed.
-
-## Current implementation note
-
-The app now persists snapshots locally under `data/snapshots/`, keeps raw payloads server-side, and attaches evidence metadata to assistant responses. This narrows the verification gap because a user can inspect what was extracted before trusting an answer.
+The first implementation is intentionally a local web app plus local API server. It does not modify PoB2, does not mutate builds, and does not assume live PoB bridge availability. This keeps the MVP testable while leaving clear extension points for `poe2-mcp` and a PoB2 Lua addon.
