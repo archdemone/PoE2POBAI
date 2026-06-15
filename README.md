@@ -1,47 +1,96 @@
 # PoBAI
 
-PoBAI is a proof-of-concept local web assistant for Path of Building 2 snapshots. The first version focuses on manual import of a fresh PoB2 build payload, OpenRouter-backed chat, and a clean boundary for adding `poe2-mcp`/PoB calculation tools next.
+PoBAI gives an LLM full tool-based access to Path of Building 2 builds via the Model Context Protocol (MCP). The LLM can import builds, inspect skills, items, defenses, and the passive tree — then use that grounded data to give real build advice.
 
-## Current scope
+## Architecture
 
-- Vite + React web UI at `apps/pobai-web`.
-- Express local API server at `apps/pobai-server`.
-- Shared TypeScript protocol package at `packages/pobai-protocol`.
-- Immutable in-memory build snapshot import endpoint.
-- OpenRouter-compatible chat endpoint.
-- Stub MCP tools endpoint for the next integration milestone.
+```
+LLM (Claude Desktop / any MCP client)
+        │
+        │ MCP stdio
+        ▼
+apps/pob-mcp-server   ← the product: 8 MCP tools for PoB2 build access
+        │
+        │ shared disk store (data/snapshots/)
+        ▼
+apps/pobai-server     ← HTTP server for the web UI companion
+apps/pobai-web        ← React UI for human-facing snapshot + chat view
+```
 
-## Run locally
+## MCP server (primary)
+
+`apps/pob-mcp-server` exposes 8 tools over stdio MCP:
+
+| Tool | What it does |
+|---|---|
+| `import_pob_build` | Import a PoB export code (base64) or raw XML. Returns `snapshot_id`. |
+| `list_builds` | List all imported builds. |
+| `get_build_summary` | Full build data: character, skills, items, defenses, passive tree. |
+| `get_skills` | All skill groups and gem details. |
+| `get_items` | Equipped items, optionally filtered by slot. |
+| `get_passive_tree` | Tree URL, version, allocated node count. |
+| `get_defenses` | Life, ES, resistances, armour, evasion, block. |
+| `delete_build` | Remove a stored build. |
+
+### Claude Desktop setup
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "pob-assistant": {
+      "command": "node",
+      "args": ["/absolute/path/to/PoE2POBAI/apps/pob-mcp-server/dist/index.js"]
+    }
+  }
+}
+```
+
+Then build once:
+```bash
+npm install
+npm run build --workspace apps/pob-mcp-server
+```
+
+### Dev / run without build
 
 ```bash
 npm install
-npm run dev
+npx tsx apps/pob-mcp-server/src/index.ts
 ```
 
-Then open <http://localhost:5173>. The API server listens on <http://localhost:3001>.
+### Tests
+
+```bash
+npm run test --workspace apps/pob-mcp-server
+```
+
+34 tests covering: XML parsing, PoB code decompression, item/skill/defense extraction, snapshot CRUD, and disk persistence.
+
+## Web UI companion (optional)
+
+The web UI lets you paste builds and chat with an LLM manually. It shares the same `data/snapshots/` store as the MCP server.
+
+```bash
+npm run dev   # Vite @ 5173, HTTP server @ 3001
+```
 
 ## Environment variables
 
-Create a local `.env` file if you want to override defaults:
-
 ```bash
 POBAI_SERVER_PORT=3001
-POBAI_WEB_ORIGIN=http://localhost:5173
+POBAI_DATA_DIR=/path/to/data/snapshots   # shared between MCP server and HTTP server
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_HTTP_REFERER=http://localhost:5173
-VITE_POBAI_API_URL=http://localhost:3001
 ```
 
-The OpenRouter API key is entered in the web UI for the proof of concept and is sent only to the local API server request handler.
+## Snapshot model
 
-## Snapshot safety model
+All builds are stored as immutable snapshots. Re-import from PoB2 to pick up changes. Direct mutation of a live PoB2 build is intentionally out of scope until the PoB2 Lua bridge is ready.
 
-PoBAI treats imported builds as immutable snapshots. If you manually change a build in PoB2, import a fresh PoB code/XML payload before asking for advice. Direct mutation of a live PoB2 build is intentionally out of scope for this first scaffold.
+## What's next
 
-## Next milestones
-
-1. Connect the server to `poe2-mcp` and list available MCP tools.
-2. Call PoE2 mechanics/wiki/support-gem validation tools from chat.
-3. Add PoB code decompression/import through MCP rather than parsing XML only.
-4. Add PoB2 Lua bridge integration under `integrations/pob2-addon`.
-5. Add experimental snapshot clone/diff/revert flows for safe recommendations.
+1. PoB2 Lua bridge — live DPS/eHP calculations rather than XML-only stats.
+2. `poe2-mcp` integration — character data, support validation, top-build comparison.
+3. Wire the web UI chat to USE MCP tools in a tool-use loop (Option B).
+4. Snapshot clone/diff for safe what-if recommendations.
