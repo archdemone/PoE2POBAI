@@ -624,6 +624,18 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  if (request.method === "GET" && url.pathname === "/api/builds") {
+    const builds = [...snapshots.values()].map((s) => ({
+      snapshot_id: s.id,
+      label: s.label,
+      source: s.source,
+      created_at: s.createdAt,
+      character: s.summary?.character,
+    }));
+    sendJson(response, 200, builds);
+    return;
+  }
+
   const snapshotMatch = url.pathname.match(/^\/api\/build\/([^/]+)\/summary$/);
   if (request.method === "GET" && snapshotMatch) {
     const snapshot = snapshots.get(snapshotMatch[1]);
@@ -632,6 +644,54 @@ async function handleApi(request, response, url) {
       return;
     }
     sendJson(response, 200, { snapshot });
+    return;
+  }
+
+  const skillsMatch = url.pathname.match(/^\/api\/build\/([^/]+)\/skills$/);
+  if (request.method === "GET" && skillsMatch) {
+    const sid = skillsMatch[1];
+    const snap = snapshots.get(sid);
+    if (!snap) {
+      sendJson(response, 404, { error: "Build not found" });
+      return;
+    }
+    sendJson(response, 200, { skills: snap.summary?.skills || [] });
+    return;
+  }
+
+  const itemsMatch = url.pathname.match(/^\/api\/build\/([^/]+)\/items$/);
+  if (request.method === "GET" && itemsMatch) {
+    const sid = itemsMatch[1];
+    const snap = snapshots.get(sid);
+    if (!snap) {
+      sendJson(response, 404, { error: "Build not found" });
+      return;
+    }
+    sendJson(response, 200, { items: snap.summary?.items || [] });
+    return;
+  }
+
+  const treeMatch = url.pathname.match(/^\/api\/build\/([^/]+)\/passive-tree$/);
+  if (request.method === "GET" && treeMatch) {
+    const sid = treeMatch[1];
+    const snap = snapshots.get(sid);
+    if (!snap) {
+      sendJson(response, 404, { error: "Build not found" });
+      return;
+    }
+    sendJson(response, 200, snap.summary?.passiveTree || {});
+    return;
+  }
+
+  const defMatch = url.pathname.match(/^\/api\/build\/([^/]+)\/defenses$/);
+  if (request.method === "GET" && defMatch) {
+    const sid = defMatch[1];
+    const snap = snapshots.get(sid);
+    if (!snap) {
+      sendJson(response, 404, { error: "Build not found" });
+      return;
+    }
+    sendJson(response, 200, { defenses: snap.summary?.defenses || {} });
     return;
   }
 
