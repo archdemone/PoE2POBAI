@@ -1,0 +1,85 @@
+<h2>Task #2: Web UI MCP Tool-Use Loop</h2>
+<p class="subtitle">Current architecture vs. target "Option B" — where the frontend participates in the tool loop</p>
+
+<h3>Current: Server-side tool loop (what exists today)</h3>
+<div class="mockup">
+  <div class="mockup-header">POST /api/chat — Server does everything</div>
+  <div class="mockup-body">
+    <div style="display:flex; gap:2px; font-size:0.8em;">
+      <div style="flex:1;background:#1a1a2e;padding:8px;border-radius:4px;">
+        <strong>Browser</strong>
+        <div class="mock-input" style="margin:4px 0;">User types: "is this build tanky?"</div>
+        <div class="mock-button" style="margin:4px 0;">Send → POST /api/chat</div>
+        <div style="margin-top:8px;padding:4px;background:#16213e;border-radius:3px;">
+          <small>⏳ Waiting...</small>
+        </div>
+        <div style="margin-top:4px;padding:4px;background:#16213e;border-radius:3px;">
+          <small>✅ Response text (tool traces collapsed)</small>
+        </div>
+      </div>
+      <div style="width:30px;text-align:center;padding-top:20px;">→</div>
+      <div style="flex:1;background:#0f3460;padding:8px;border-radius:4px;">
+        <strong>pobai-server</strong>
+        <div style="margin:4px 0;font-size:0.7em;">
+          LLM call → tool_call → execute → result → LLM call → ... → final text
+        </div>
+        <div style="font-size:0.7em;color:#aaa;">(8 iter max, all server-side)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>Target "Option B": Frontend participates in the loop</h3>
+<div class="mockup">
+  <div class="mockup-header">Browser drives the loop, shows each step</div>
+  <div class="mockup-body">
+    <div style="display:flex; gap:2px; font-size:0.8em;">
+      <div style="flex:1;background:#1a1a2e;padding:8px;border-radius:4px;">
+        <strong>Browser (MCP client)</strong>
+        <div class="mock-input" style="margin:4px 0;">User: "is this build tanky?"</div>
+        <div style="margin:4px 0;padding:2px 4px;background:#2d6a4f;border-radius:2px;font-size:0.7em;">🔄 Calling get_defenses...</div>
+        <div style="margin:4px 0;padding:2px 4px;background:#1b4332;border-radius:2px;font-size:0.7em;">📊 Result: 4500 life, 75% res...</div>
+        <div style="margin:4px 0;padding:2px 4px;background:#2d6a4f;border-radius:2px;font-size:0.7em;">🔄 Calling get_items...</div>
+        <div style="margin:4px 0;padding:2px 4px;background:#1b4332;border-radius:2px;font-size:0.7em;">📊 Result: 6 items found...</div>
+        <div style="margin-top:8px;padding:4px;background:#16213e;border-radius:3px;">
+          <small>💬 "This build has strong elemental defense but low chaos res..."</small>
+        </div>
+      </div>
+      <div style="width:30px;text-align:center;padding-top:20px;">⇄</div>
+      <div style="flex:1;background:#0f3460;padding:8px;border-radius:4px;">
+        <strong>pobai-server (LLM proxy)</strong>
+        <div style="font-size:0.7em;margin:4px 0;">
+          Forwards: user msg → LLM; LLM's tool_calls → browser; browser's results → LLM
+        </div>
+        <div style="font-size:0.7em;color:#aaa;">Server is a thin relay, browser owns the loop</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>Key Decision: Streaming Protocol</h3>
+<p class="subtitle">How does the browser talk to the server during the loop?</p>
+
+<div class="options">
+  <div class="option" data-choice="sse" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>SSE (Server-Sent Events)</h3>
+      <p>POST /api/chat returns a streaming response. Each event is a tool_call, tool_result, or text chunk. Browser renders as they arrive. Simple, one HTTP connection.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="ws" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>WebSocket</h3>
+      <p>Persistent bidirectional connection. Browser sends messages, server streams back tool_calls, browser sends tool_results back, server continues. Most flexible, slightly more complex.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="poll" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Repeated POST polling</h3>
+      <p>Browser POSTs, server runs ONE tool_call iteration and returns. Browser POSTs result back, server continues. Loop unwound into individual request/response pairs. Simplest to implement, no new protocols.</p>
+    </div>
+  </div>
+</div>

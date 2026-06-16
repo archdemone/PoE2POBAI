@@ -1,0 +1,64 @@
+<h2>Task #2: Design Summary</h2>
+<p class="subtitle">Web UI MCP Tool-Use Loop — Architecture</p>
+
+<div style="display:flex;gap:12px;margin-top:12px;">
+  <div style="flex:1;">
+    <h3>Decisions</h3>
+    <table style="width:100%;font-size:0.8em;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;">Streaming</td><td style="padding:4px;color:#4ade80;">WebSocket</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;">Loop control</td><td style="padding:4px;color:#4ade80;">Frontend-driven</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;">Tool execution</td><td style="padding:4px;color:#4ade80;">HTTP REST API</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;">Text streaming</td><td style="padding:4px;color:#4ade80;">Step-by-step only</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;">Components</td><td style="padding:4px;color:#4ade80;">Full tree + tests</td></tr>
+    </table>
+  </div>
+  <div style="flex:1;">
+    <h3>Data Flow</h3>
+    <div style="font-size:0.7em;">
+      <div style="background:#1a1a2e;padding:6px;border-radius:3px;margin:2px 0;"><strong>1.</strong> Browser opens WebSocket to pobai-server</div>
+      <div style="background:#1a1a2e;padding:6px;border-radius:3px;margin:2px 0;"><strong>2.</strong> User sends message via WS</div>
+      <div style="background:#1a1a2e;padding:6px;border-radius:3px;margin:2px 0;"><strong>3.</strong> Server forwards to LLM (OpenRouter)</div>
+      <div style="background:#0f3460;padding:6px;border-radius:3px;margin:2px 0;"><strong>4.</strong> LLM returns tool_calls → server → WS → browser shows "Running X..."</div>
+      <div style="background:#0f3460;padding:6px;border-radius:3px;margin:2px 0;"><strong>5.</strong> Browser calls HTTP API → executes tool → sends results via WS → server → LLM</div>
+      <div style="background:#0f3460;padding:6px;border-radius:3px;margin:2px 0;"><strong>6.</strong> Repeat until LLM returns text → browser shows final response</div>
+    </div>
+  </div>
+  <div style="flex:1;">
+    <h3>New Files</h3>
+    <div style="font-size:0.7em;">
+      <div style="background:#16213e;padding:4px;border-radius:2px;margin:2px 0;">pobai-web/src/<br>
+        ├── <span style="color:#4ade80;">components/</span><br>
+        │   ├── ChatPanel.tsx<br>
+        │   ├── ToolLoop.tsx<br>
+        │   ├── BuildSidebar.tsx<br>
+        │   ├── ImportModal.tsx<br>
+        │   ├── ToolTrace.tsx<br>
+        │   └── ErrorBoundary.tsx<br>
+        ├── <span style="color:#4ade80;">hooks/</span><br>
+        │   └── useWebSocket.ts<br>
+        └── <span style="color:#4ade80;">__tests__/</span></div>
+      <div style="background:#16213e;padding:4px;border-radius:2px;margin:2px 0;">pobai-server/src/<br>
+        ├── <span style="color:#4ade80;">ws-handler.mjs</span><br>
+        └── new REST routes</div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:16px;">
+  <h3>What Changes</h3>
+  <div class="pros-cons">
+    <div class="pros"><h4>Keep / Extend</h4><ul>
+      <li>Existing import-resolver + snapshot store</li>
+      <li>Existing poe2-mcp bridge client</li>
+      <li>Existing LLM call logic (adapted for WS relay)</li>
+      <li>Existing CSS theme</li>
+    </ul></div>
+    <div class="cons"><h4>Replace / Remove</h4><ul>
+      <li>POST /api/chat (replaced by WS)</li>
+      <li>Single-file main.tsx (decomposed)</li>
+      <li>Tool trace inside message (becomes live ToolLoop)</li>
+    </ul></div>
+  </div>
+</div>
+
+<p style="margin-top:16px;">Does this design look right? Ready to move to brainstorming Task #3 (snapshot clone/diff)?</p>

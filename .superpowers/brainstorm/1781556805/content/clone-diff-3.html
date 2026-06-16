@@ -1,0 +1,63 @@
+<h2>Task #3 — Diff Output & Provenance</h2>
+<p class="subtitle">How are diffs presented? How do clones relate to originals?</p>
+
+<h3>Diff Output Format</h3>
+<div class="options" data-multiselect>
+  <div class="option" data-choice="structured-json" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Structured JSON diff</h3>
+      <p>Machine-readable: <code>{items: {added: [...], removed: [...], modified: [...]}, skills: {...}, passives: {...}}</code>. Needed for MCP tool responses and programmatic use.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="human-text" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Human-readable summary</h3>
+      <p>Natural language: "Swapped Ring 1 (Two-Stone Ring → Ming's Heart), added Herald of Ice, removed 3 passive nodes near Shadow." For chat display.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="side-by-side" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Side-by-side view (UI only)</h3>
+      <p>Visual comparison table in the web UI. Not exposed via API/MCP. Purely a frontend rendering concern.</p>
+    </div>
+  </div>
+</div>
+
+<h3 style="margin-top:16px;">Clone Provenance</h3>
+<div class="options">
+  <div class="option" data-choice="linked-clones" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Linked clones (parent tracking)</h3>
+      <p>Each clone stores parentId + patch that created it. Traceable lineage tree. "This variant was made by swapping ring + 5 nodes from build abc123."</p>
+    </div>
+  </div>
+  <div class="option" data-choice="flat-clones" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Flat clones (standalone)</h3>
+      <p>Clone is just a new independent snapshot. No provenance tracking. Simplest, but can't tell how a variant was made.</p>
+    </div>
+  </div>
+</div>
+
+<h3 style="margin-top:16px;">Implementation Location</h3>
+<div class="options">
+  <div class="option" data-choice="mcp-server-impl" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>In pob-mcp-server (MCP + store)</h3>
+      <p>Add clone/diff/patch to the MCP server's snapshot-store. New MCP tools. HTTP server wraps them. Single source of truth.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="http-server-impl" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>In pobai-server (HTTP only)</h3>
+      <p>Add clone/diff to the HTTP server, not MCP. Faster to build, but MCP-only users (Claude Desktop) can't use it unless MCP tools are also added.</p>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,55 @@
+<h2>Task #3: Snapshot Clone/Diff</h2>
+<p class="subtitle">Today: immutable snapshots. Target: clone, diff, and what-if analysis.</p>
+
+<h3>Current Snapshot Model</h3>
+<div class="mockup">
+  <div class="mockup-body" style="font-size:0.75em;">
+    <table style="width:100%;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#888;">ID</td><td style="padding:4px;">abc123 (UUID)</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#888;">Hash</td><td style="padding:4px;">SHA256 of payload</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#888;">Character</td><td style="padding:4px;">name, class, ascendancy, level, league</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#888;">Skills</td><td style="padding:4px;">skill groups, gems, supports, levels</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#888;">Items</td><td style="padding:4px;">slot, name, typeLine, rarity, stats</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#888;">Passive Tree</td><td style="padding:4px;">treeUrl, version, allocated node count/IDs</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#888;">Defenses</td><td style="padding:4px;">life, ES, resists, armour, evasion, block</td></tr>
+    </table>
+    <div style="margin-top:8px;padding:6px;background:#331100;border-radius:3px;color:#ff9944;">
+      Immutable: once imported, no changes allowed.
+    </div>
+  </div>
+</div>
+
+<h3>Core Question: What should clone/diff enable?</h3>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="clone-variant" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Clone → variant build</h3>
+      <p>Copy a snapshot to a new ID with an optional label. Then the LLM can propose changes: "if you swap this ring for a Ming's Heart, your chaos res drops but DPS goes up." The variant is a full standalone snapshot.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="diff-compare" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Diff two snapshots</h3>
+      <p>Compare any two builds side by side: items changed, skill swaps, passive tree differences, defense deltas. Useful for "show me what changed between my last two imports."</p>
+    </div>
+  </div>
+  <div class="option" data-choice="whatif-apply" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>What-if: apply & compare</h3>
+      <p>LLM proposes a change set (e.g. swap ring, allocate 5 nodes, change gem). System applies it to a clone, computes diff, and shows before/after stats. The most advanced option.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="mcp-tools" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>Expose as MCP tools</h3>
+      <p>Add <code>clone_build</code>, <code>diff_builds</code>, <code>patch_build</code> tools so any MCP client (Claude Desktop, cursor, etc.) can use these, not just the web UI.</p>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle">Select all that apply. Which capabilities do you want?</p>

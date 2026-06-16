@@ -1,6 +1,9 @@
 # PoB2 → PoBAI integration
 
-Two stages: **export helper now** (works immediately, no PoB2 modification), **in-app chatbox later** (requires patching PoB2 Lua).
+Three tools:
+- **`export.mjs`** — CLI picker: reads saved PoB2 builds from disk and sends one to PoBAI (works immediately, no PoB2 modification).
+- **`watch.mjs`** — auto-importer: watches your PoB2 Builds directory and imports on every save.
+- **`install-patch.mjs`** — in-app button: patches PoB2's `ImportTab.lua` to add a "Send to PoBAI" button inside PoB2 itself.
 
 ---
 
@@ -73,23 +76,41 @@ Opening PoBAI at http://localhost:5173 …
 
 ---
 
-## Stage 2 — In-app chatbox (future)
+## Stage 2 — In-app export button
 
-The goal is a chat panel that appears directly inside PoB2 when PoBAI is running. This requires patching PoB2's Lua source.
+Adds a "Send to PoBAI" button inside PoB2's Export tab. Clicking it exports the current build to PoBAI and opens the chat UI in your browser.
 
-PoB2 uses its own Lua runtime (not Love2D directly). The integration plan:
+### Auto-install (recommended)
 
-1. **Hook into PoB2's UI** — add a "PoBAI" button in the sidebar or build panel.
-2. **On click** — POST the current build's XML to `localhost:3001/api/build/import` using PoB2's existing HTTP socket library (`lcurl` / LuaSocket).
-3. **Render a chat panel** — use PoB2's UI framework to show a simple input + scrollable response area.
-4. **Poll for responses** — PoBAI chat is a synchronous POST; poll every 500ms or use a coroutine.
+```bash
+node integrations/pob2-addon/install-patch.mjs
+```
 
-Relevant PoB2 source files to patch (from `PathOfBuildingCommunity/PathOfBuilding-PoE2`):
-- `src/Classes/BuildList.lua` — add "Send to PoBAI" to the build list context menu
-- `src/Classes/SectionPanel.lua` or equivalent — add the chat panel UI
-- `src/Classes/Build.lua` — expose `GetCode()` to generate the export code inline
+Optional flags:
 
-This is deferred until the export helper proves the concept works end-to-end.
+| Flag | Description |
+|------|-------------|
+| `--pob2-dir "path"` | Override auto-detected PoB2 install directory |
+| `--dry-run` | Check what would change without modifying anything |
+| `--revert` | Restore backup and undo the patch |
+
+The script:
+1. Auto-detects your PoB2 install directory (standalone / Steam / macOS / Linux)
+2. Backs up `ImportTab.lua` → `ImportTab.lua.bak`
+3. Injects the helper functions and "Send to PoBAI" button into `ImportTab.lua`
+4. You restart PoB2 and the button appears in the Export tab
+
+### Manual install (if auto-patcher fails)
+
+1. Open `<PoB2 install>/src/Classes/ImportTab.lua`
+2. Find `newClass("ImportTab"` — paste the HELPER FUNCTIONS block from `pobai_patch.lua` before it
+3. Find `controls.generateCodeOut` — paste the BUTTON BLOCK from `pobai_patch.lua` after its closing `)`
+4. Save and restart PoB2
+
+### Requirements
+
+- PoBAI server running: `node apps/pobai-server/src/index.mjs` (or `npm run dev`)
+- Node.js 22+
 
 ---
 

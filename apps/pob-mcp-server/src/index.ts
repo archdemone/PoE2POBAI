@@ -302,6 +302,143 @@ server.tool(
   }
 );
 
+server.tool(
+  "clone_build",
+  "Clone an existing build snapshot. Creates a new snapshot with the same XML payload but a new ID and parent link.",
+  {
+    snapshot_id: z.string().describe("The snapshot_id of the build to clone"),
+    label: z.string().max(120).optional().describe("Optional label for the clone"),
+  },
+  async ({ snapshot_id, label }) => {
+    await store.init();
+    const snapshot = await store.clone(snapshot_id, label);
+    if (!snapshot) {
+      return {
+        content: [{ type: "text", text: `No build found with snapshot_id: ${snapshot_id}` }],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              snapshot_id: snapshot.id,
+              label: snapshot.label,
+              parent_id: snapshot.parentId,
+              created_at: snapshot.createdAt,
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  "diff_builds",
+  "Compare two build snapshots and return a structured diff of skills, items, defenses, and passives.",
+  {
+    base_snapshot_id: z.string().describe("The original snapshot_id"),
+    target_snapshot_id: z.string().describe("The modified snapshot_id to compare against"),
+  },
+  async ({ base_snapshot_id, target_snapshot_id }) => {
+    await store.init();
+    const diff = await store.diff(base_snapshot_id, target_snapshot_id);
+    if (!diff) {
+      return {
+        content: [{ type: "text", text: "One or both snapshot_ids not found." }],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(diff, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  "get_lineage",
+  "Get the clone/patch ancestry chain for a build snapshot, from newest to oldest.",
+  {
+    snapshot_id: z.string().describe("The snapshot_id to trace lineage from"),
+  },
+  async ({ snapshot_id }) => {
+    await store.init();
+    const lineage = store.getLineage(snapshot_id);
+    if (lineage.length === 0) {
+      return {
+        content: [{ type: "text", text: `No build found with snapshot_id: ${snapshot_id}` }],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(lineage, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  "apply_build_patch",
+  "Apply an XML patch to a build snapshot and create a new patched snapshot (what-if). " +
+    "Patch uses XML instruction syntax: <AddSkill label=\"...\" gems=\"...\"/>, " +
+    "<RemoveSkill label=\"...\"/>, <ReplaceAttr selector=\"Build\" name=\"className\" value=\"...\"/>, " +
+    "<AddItem slot=\"...\" name=\"...\"/>, <RemoveItem slot=\"...\"/>, " +
+    "<ReplaceDefense name=\"...\" value=\"...\"/>, <AddNodes ids=\"...\"/>, <RemoveNodes ids=\"...\"/>.",
+  {
+    snapshot_id: z.string().describe("The snapshot_id to patch"),
+    patch: z.string().describe("XML patch instructions (one per line)"),
+    label: z.string().max(120).optional().describe("Optional label for the patched snapshot"),
+  },
+  async ({ snapshot_id, patch, label }) => {
+    await store.init();
+    const result = await store.applyPatch(snapshot_id, patch, label);
+    if (!result) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Could not apply patch. Check that snapshot_id exists and the patch produces changes.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              snapshot_id: result.id,
+              label: result.label,
+              parent_id: result.parentId,
+              patch: result.patchPath,
+              skills_count: result.summary.skills.length,
+              items_count: result.summary.items.length,
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  }
+);
+
 const transport = new StdioServerTransport();
 await store.init();
 await server.connect(transport);

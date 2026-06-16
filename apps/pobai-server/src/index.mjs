@@ -284,6 +284,76 @@ function parseBuildSummary(payload, source) {
   return summary;
 }
 
+function parsePatchLine(line) {
+  const t = line.trim();
+  const m = t.match(/^<(\w+)\s+([^>]*)\/?>$/);
+  if (!m) return null;
+  const attrs = {};
+  for (const a of m[2].matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) {
+    attrs[a[1]] = a[2];
+  }
+  return { tag: m[1], attrs };
+}
+
+function applyXmlPatch(xml, patchStr) {
+  let result = xml;
+  const lines = patchStr.split("\n").map((l) => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    const instr = parsePatchLine(line);
+    if (!instr) continue;
+    if (instr.tag === "ReplaceAttr" && instr.attrs.selector && instr.attrs.name && instr.attrs.value !== undefined) {
+      const re = new RegExp(`(<${instr.attrs.selector}\\b[^>]*\\b)${instr.attrs.name}="[^"]*"`, "i");
+      if (re.test(result)) {
+        result = result.replace(re, `$1${instr.attrs.name}="${instr.attrs.value}"`);
+      } else {
+        result = result.replace(new RegExp(`(<${instr.attrs.selector}\\b)`, "i"), `$1${instr.attrs.name}="${instr.attrs.value}" `);
+      }
+    }
+    if (instr.tag === "ReplaceDefense" && instr.attrs.name && instr.attrs.value !== undefined) {
+      const re = new RegExp(`(<PlayerStat[^>]*\\b)${instr.attrs.name}="[^"]*"`, "i");
+      if (re.test(result)) {
+        result = result.replace(re, `$1${instr.attrs.name}="${instr.attrs.value}"`);
+      } else {
+        result = result.replace(/(<PlayerStat\b)/i, `$1 ${instr.attrs.name}="${instr.attrs.value}"`);
+      }
+    }
+  }
+  return result === xml ? null : result;
+}
+
+function computeSnapshotDiff(xml1, xml2, id1, id2) {
+  const skills1 = collectBlocks(xml1, "Skill");
+  const skills2 = collectBlocks(xml2, "Skill");
+  const items1 = collectBlocks(xml1, "Item");
+  const items2 = collectBlocks(xml2, "Item");
+
+  const skillKey = (s) => s.attributes.label || textFromTag(s.body, "Name") || "unknown";
+  const sk1 = new Set(skills1.map(skillKey));
+  const sk2 = new Set(skills2.map(skillKey));
+  const skillsRemoved = skills1.filter((s) => !sk2.has(skillKey(s))).map((s) => ({ label: skillKey(s), gems: collectTagAttributes(s.body, "Gem").map((g) => g.nameSpec || g.name || "").filter(Boolean) }));
+  const skillsAdded = skills2.filter((s) => !sk1.has(skillKey(s))).map((s) => ({ label: skillKey(s), gems: collectTagAttributes(s.body, "Gem").map((g) => g.nameSpec || g.name || "").filter(Boolean) }));
+
+  const itemKey = (i) => i.attributes.slot || textFromTag(i.body, "Name") || "unknown";
+  const ik1 = new Set(items1.map(itemKey));
+  const ik2 = new Set(items2.map(itemKey));
+  const itemsRemoved = items1.filter((i) => !ik2.has(itemKey(i))).map((i) => ({ slot: i.attributes.slot, name: textFromTag(i.body, "Name") }));
+  const itemsAdded = items2.filter((i) => !ik1.has(itemKey(i))).map((i) => ({ slot: i.attributes.slot, name: textFromTag(i.body, "Name") }));
+
+  const nodes1 = new Set(collectTagAttributes(xml1, "Node").map((n) => n.id || n.nodeId).filter(Boolean));
+  const nodes2 = new Set(collectTagAttributes(xml2, "Node").map((n) => n.id || n.nodeId).filter(Boolean));
+  const nodesAdded = [...nodes2].filter((n) => !nodes1.has(n)).length;
+  const nodesRemoved = [...nodes1].filter((n) => !nodes2.has(n)).length;
+
+  const defs1 = firstTagAttributes(xml1, "PlayerStat");
+  const defs2 = firstTagAttributes(xml2, "PlayerStat");
+  const defensesChanged = {};
+  for (const key of new Set([...Object.keys(defs1), ...Object.keys(defs2)])) {
+    if (defs1[key] !== defs2[key]) defensesChanged[key] = { from: defs1[key], to: defs2[key] };
+  }
+
+  return { baseId: id1, targetId: id2, skillsAdded, skillsRemoved, itemsAdded, itemsRemoved, defensesChanged, passivesChanged: { nodesAdded, nodesRemoved } };
+}
+
 function buildSnapshotContext(snapshot) {
   if (!snapshot) return "No build snapshot is currently selected.";
   const lines = [
@@ -409,6 +479,7 @@ function buildEvidence(snapshot, question = "") {
 const LOCAL_TOOL_NAMES = new Set([
   "list_builds", "get_build_summary", "get_skills",
   "get_items", "get_defenses", "get_passive_tree",
+  "clone_build", "diff_builds", "get_lineage", "apply_build_patch",
 ]);
 
 /** Merge our local tools with whatever poe2-mcp has connected. */
@@ -496,6 +567,66 @@ const BASE_TOOL_DEFINITIONS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "clone_build",
+      description: "Clone an existing build snapshot. Creates a copy with a new ID and parent link.",
+      parameters: {
+        type: "object",
+        properties: {
+          snapshot_id: { type: "string", description: "The snapshot ID to clone." },
+          label: { type: "string", description: "Optional label for the cloned build." },
+        },
+        required: ["snapshot_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "diff_builds",
+      description: "Compare two build snapshots and return a structured diff: skills, items, defenses, and passive nodes added/removed/changed.",
+      parameters: {
+        type: "object",
+        properties: {
+          base_snapshot_id: { type: "string", description: "The original snapshot ID." },
+          target_snapshot_id: { type: "string", description: "The modified snapshot ID to compare." },
+        },
+        required: ["base_snapshot_id", "target_snapshot_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_lineage",
+      description: "Get the clone/patch ancestry chain for a build snapshot, from newest to oldest.",
+      parameters: {
+        type: "object",
+        properties: {
+          snapshot_id: { type: "string", description: "The snapshot ID to trace." },
+        },
+        required: ["snapshot_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "apply_build_patch",
+      description: "Apply an XML patch to a build snapshot and create a new patched snapshot (what-if). Patch uses XML instruction syntax: <ReplaceAttr selector=\"Build\" name=\"className\" value=\"...\"/>, <ReplaceDefense name=\"Life\" value=\"5000\"/>.",
+      parameters: {
+        type: "object",
+        properties: {
+          snapshot_id: { type: "string", description: "The snapshot ID to patch." },
+          patch: { type: "string", description: "XML patch instructions (one per line)." },
+          label: { type: "string", description: "Optional label for the patched build." },
+        },
+        required: ["snapshot_id", "patch"],
+      },
+    },
+  },
 ];
 
 function executeLocalTool(name, args) {
@@ -555,6 +686,80 @@ function executeLocalTool(name, args) {
   if (name === "get_passive_tree") {
     if (!snap) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
     return snap.summary.passiveTree;
+  }
+
+  if (name === "clone_build") {
+    const original = args?.snapshot_id ? snapshots.get(args.snapshot_id) : undefined;
+    if (!original) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
+    const payload = payloads.get(original.id);
+    if (!payload) return { error: "Payload not available in memory" };
+    const clone = {
+      ...original,
+      id: randomUUID(),
+      createdAt: new Date().toISOString(),
+      label: args?.label?.trim() || `${original.label} (clone)`,
+      parentId: original.id,
+    };
+    delete clone.parentId; clone.parentId = original.id;
+    snapshots.set(clone.id, clone);
+    payloads.set(clone.id, payload);
+    persistSnapshot(clone, payload);
+    return { snapshot_id: clone.id, label: clone.label, parent_id: clone.parentId, created_at: clone.createdAt };
+  }
+
+  if (name === "diff_builds") {
+    const id1 = args?.base_snapshot_id;
+    const id2 = args?.target_snapshot_id;
+    if (!id1 || !id2) return { error: "base_snapshot_id and target_snapshot_id required" };
+    const s1 = snapshots.get(id1);
+    const s2 = snapshots.get(id2);
+    if (!s1 || !s2) return { error: "One or both snapshots not found" };
+    const p1 = payloads.get(id1);
+    const p2 = payloads.get(id2);
+    if (!p1 || !p2) return { error: "Payloads not available in memory" };
+    return computeSnapshotDiff(p1, p2, id1, id2);
+  }
+
+  if (name === "get_lineage") {
+    const id = args?.snapshot_id;
+    if (!id) return { error: "snapshot_id required" };
+    const start = snapshots.get(id);
+    if (!start) return { error: `No build found with snapshot_id: ${id}` };
+    const entries = [];
+    let current = start;
+    while (current) {
+      entries.push({ id: current.id, label: current.label, createdAt: current.createdAt, parentId: current.parentId });
+      current = current.parentId ? snapshots.get(current.parentId) : undefined;
+    }
+    return entries;
+  }
+
+  if (name === "apply_build_patch") {
+    const original = args?.snapshot_id ? snapshots.get(args.snapshot_id) : undefined;
+    if (!original) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
+    const payload = payloads.get(original.id);
+    if (!payload) return { error: "Payload not available in memory" };
+    if (!args?.patch || typeof args.patch !== "string") return { error: "patch string required" };
+    const newPayload = applyXmlPatch(payload, args.patch);
+    if (!newPayload) return { error: "Patch produced no changes" };
+    const hash = createHash("sha256").update(newPayload).digest("hex");
+    const summary = parseBuildSummary(newPayload, original.source);
+    const patched = {
+      id: randomUUID(),
+      source: original.source,
+      createdAt: new Date().toISOString(),
+      label: args?.label?.trim() || `${original.label} (patched)`,
+      hash,
+      sizeBytes: Buffer.byteLength(newPayload, "utf8"),
+      preview: newPayload.slice(0, 240),
+      summary,
+      parentId: original.id,
+      patchPath: args.patch.slice(0, 120),
+    };
+    snapshots.set(patched.id, patched);
+    payloads.set(patched.id, newPayload);
+    persistSnapshot(patched, newPayload);
+    return { snapshot_id: patched.id, label: patched.label, parent_id: patched.parentId, skills_count: patched.summary.skills.length, items_count: patched.summary.items.length };
   }
 
   return null; // not a local tool
@@ -692,6 +897,88 @@ async function handleApi(request, response, url) {
       return;
     }
     sendJson(response, 200, { defenses: snap.summary?.defenses || {} });
+    return;
+  }
+
+  const cloneMatch = url.pathname.match(/^\/api\/build\/([^/]+)\/clone$/);
+  if (request.method === "POST" && cloneMatch) {
+    const snap = snapshots.get(cloneMatch[1]);
+    if (!snap) { sendJson(response, 404, { error: "Snapshot not found" }); return; }
+    const payload = await getPayload(snap.id);
+    if (!payload) { sendJson(response, 500, { error: "Payload not found on disk" }); return; }
+    const body = await readJson(request);
+    const clone = {
+      ...snap,
+      id: randomUUID(),
+      createdAt: new Date().toISOString(),
+      label: body.label?.trim() || `${snap.label} (clone)`,
+      parentId: snap.id,
+    };
+    delete clone.parentId; delete clone.patchPath; // clean inherited optional fields
+    clone.parentId = snap.id;
+    snapshots.set(clone.id, clone);
+    payloads.set(clone.id, payload);
+    await persistSnapshot(clone, payload);
+    sendJson(response, 201, { snapshot: clone });
+    return;
+  }
+
+  const diffMatch = url.pathname === "/api/build/diff" && request.method === "POST";
+  if (diffMatch) {
+    const body = await readJson(request);
+    const id1 = body.base_snapshot_id;
+    const id2 = body.target_snapshot_id;
+    if (!id1 || !id2) { sendJson(response, 400, { error: "base_snapshot_id and target_snapshot_id required" }); return; }
+    const s1 = snapshots.get(id1);
+    const s2 = snapshots.get(id2);
+    if (!s1 || !s2) { sendJson(response, 404, { error: "One or both snapshots not found" }); return; }
+    const [p1, p2] = await Promise.all([getPayload(id1), getPayload(id2)]);
+    if (!p1 || !p2) { sendJson(response, 500, { error: "Could not read payloads" }); return; }
+    sendJson(response, 200, computeSnapshotDiff(p1, p2, id1, id2));
+    return;
+  }
+
+  const lineageMatch = url.pathname.match(/^\/api\/build\/([^/]+)\/lineage$/);
+  if (request.method === "GET" && lineageMatch) {
+    const entries = [];
+    let current = snapshots.get(lineageMatch[1]);
+    if (!current) { sendJson(response, 404, { error: "Snapshot not found" }); return; }
+    while (current) {
+      entries.push({ id: current.id, label: current.label, createdAt: current.createdAt, parentId: current.parentId });
+      current = current.parentId ? snapshots.get(current.parentId) : undefined;
+    }
+    sendJson(response, 200, entries);
+    return;
+  }
+
+  const patchMatch = url.pathname.match(/^\/api\/build\/([^/]+)\/patch$/);
+  if (request.method === "POST" && patchMatch) {
+    const snap = snapshots.get(patchMatch[1]);
+    if (!snap) { sendJson(response, 404, { error: "Snapshot not found" }); return; }
+    const body = await readJson(request);
+    if (!body.patch || typeof body.patch !== "string") { sendJson(response, 400, { error: "patch string required" }); return; }
+    const payload = await getPayload(snap.id);
+    if (!payload) { sendJson(response, 500, { error: "Payload not found on disk" }); return; }
+    const newPayload = applyXmlPatch(payload, body.patch);
+    if (!newPayload) { sendJson(response, 422, { error: "Patch produced no changes. Check patch format." }); return; }
+    const hash = createHash("sha256").update(newPayload).digest("hex");
+    const summary = parseBuildSummary(newPayload, snap.source);
+    const patched = {
+      id: randomUUID(),
+      source: snap.source,
+      createdAt: new Date().toISOString(),
+      label: body.label?.trim() || `${snap.label} (patched)`,
+      hash,
+      sizeBytes: Buffer.byteLength(newPayload, "utf8"),
+      preview: newPayload.slice(0, 240),
+      summary,
+      parentId: snap.id,
+      patchPath: body.patch.slice(0, 120),
+    };
+    snapshots.set(patched.id, patched);
+    payloads.set(patched.id, newPayload);
+    await persistSnapshot(patched, newPayload);
+    sendJson(response, 201, { snapshot: patched });
     return;
   }
 
@@ -946,6 +1233,26 @@ const localTools = [
     name: "list_builds",
     description: "List all imported builds",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "clone_build",
+    description: "Clone an existing build snapshot",
+    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" }, label: { type: "string" } }, required: ["snapshot_id"] },
+  },
+  {
+    name: "diff_builds",
+    description: "Compare two build snapshots",
+    inputSchema: { type: "object", properties: { base_snapshot_id: { type: "string" }, target_snapshot_id: { type: "string" } }, required: ["base_snapshot_id", "target_snapshot_id"] },
+  },
+  {
+    name: "get_lineage",
+    description: "Get clone/patch ancestry chain",
+    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" } }, required: ["snapshot_id"] },
+  },
+  {
+    name: "apply_build_patch",
+    description: "Apply XML patch to build snapshot",
+    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" }, patch: { type: "string" }, label: { type: "string" } }, required: ["snapshot_id", "patch"] },
   },
 ];
 

@@ -1,0 +1,59 @@
+<h2>Step 2 of 5: Tool Loop Control</h2>
+<p class="subtitle">Who owns the tool-call iteration? Server or browser?</p>
+
+<h3>Approach A: Server-driven (thin browser)</h3>
+<div class="mockup">
+  <div class="mockup-header">Server owns the loop, browser is a view layer</div>
+  <div class="mockup-body" style="font-size:0.75em;">
+    <div style="background:#1a1a2e;padding:8px;border-radius:4px;margin:4px 0;">
+      <strong>Browser</strong> → WebSocket: "is this build tanky?"<br>
+      <span style="color:#666;">← Server streams progress events</span><br>
+      <span style="color:#666;">"Running get_defenses... done."</span><br>
+      <span style="color:#666;">"Running get_items... done."</span><br>
+      <span style="color:#666;">← Final text response</span>
+    </div>
+    <div style="text-align:center;">↕</div>
+    <div style="background:#0f3460;padding:8px;border-radius:4px;margin:4px 0;">
+      <strong>pobai-server</strong> (full loop + tool execution)<br>
+      <span style="color:#aaa;">LLM call → tool_call → execute tool → result → LLM → repeat</span>
+    </div>
+  </div>
+</div>
+
+<h3>Approach B: Frontend-driven (thick browser)</h3>
+<div class="mockup">
+  <div class="mockup-header">Browser owns the loop, server is a relay</div>
+  <div class="mockup-body" style="font-size:0.75em;">
+    <div style="background:#1a1a2e;padding:8px;border-radius:4px;margin:4px 0;">
+      <strong>Browser</strong> (owns loop logic)<br>
+      1. Sends user msg via WS<br>
+      2. Receives tool_calls from LLM<br>
+      3. <strong>Executes tools itself</strong> (calls pob-mcp-server tools via HTTP API)<br>
+      4. Sends results back via WS<br>
+      5. Receives next chunk or tool_calls<br>
+      6. Loop until done
+    </div>
+    <div style="text-align:center;">↕</div>
+    <div style="background:#0f3460;padding:8px;border-radius:4px;margin:4px 0;">
+      <strong>pobai-server</strong> (LLM proxy only)<br>
+      <span style="color:#aaa;">Forwards: browser msg → LLM; LLM response → browser. Does NOT execute tools.</span>
+    </div>
+  </div>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="server-driven" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Server-driven</h3>
+      <p>Server runs the loop + tools. Browser just renders. Faster to build — modify existing /api/chat. Less frontend complexity.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="frontend-driven" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Frontend-driven</h3>
+      <p>Browser owns the loop + executes tools via HTTP. Server is a thin LLM relay. More frontend work, but true "Option B" where the UI is the MCP client.</p>
+    </div>
+  </div>
+</div>

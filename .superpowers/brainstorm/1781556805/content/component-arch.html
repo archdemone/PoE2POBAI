@@ -1,0 +1,26 @@
+<h2>Step 5 of 5: Component Architecture</h2>
+<p class="subtitle">The current frontend is a single 623-line file (main.tsx). As part of this change, should we...</p>
+
+<div class="options">
+  <div class="option" data-choice="add-to-existing" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Add to existing file</h3>
+      <p>Keep main.tsx as-is, add WebSocket hook and tool-loop UI inline. Fastest, but the file gets even larger.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="light-refactor" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Light refactor into 3-4 components</h3>
+      <p>Split into: ChatPanel, ToolLoop, BuildSidebar, ImportModal. Add a useWebSocket hook. Cleaner, still modest scope.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="full-refactor" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Full component tree + tests</h3>
+      <p>Proper component decomposition, error boundaries, loading states, full test coverage. Takes longer but produces maintainable code.</p>
+    </div>
+  </div>
+</div>

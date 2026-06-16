@@ -1,0 +1,62 @@
+<h2>Task #3 — What's Patchable?</h2>
+<p class="subtitle">The "what-if" feature needs a patch model. Which build aspects can the LLM/API modify?</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="items" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Items (swap/add/remove)</h3>
+      <p>Change equipment by slot name: "swap current ring for Ming's Heart." LLM specifies slot + new item stats. Most common what-if scenario.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="skills" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Skills & gems</h3>
+      <p>Swap active skill gems, reconfigure supports, change gem levels. "What if I switch from Herald of Thunder to Herald of Ice?"</p>
+    </div>
+  </div>
+  <div class="option" data-choice="passives" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Passive tree nodes</h3>
+      <p>Allocate/unallocate nodes. "What if you path through the Shadow area instead?" Requires tree structure awareness.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="bandit" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>Bandit/ascendancy choice</h3>
+      <p>Change ascendancy or bandit reward. "What if you went Deadeye instead of Pathfinder?"</p>
+    </div>
+  </div>
+  <div class="option" data-choice="stats-override" onclick="toggleSelect(this)">
+    <div class="letter">E</div>
+    <div class="content">
+      <h3>Stat overrides (manual)</h3>
+      <p>Directly override a computed stat (e.g. add +50% cold res). Useful when patch model doesn't cover a scenario. LLM must justify the override.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:12px;">
+  <h3>Constraint Question</h3>
+  <div class="options">
+    <div class="option" data-choice="xml-only" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>XML-only patches</h3>
+        <p>Apply patches by modifying the raw PoB2 XML. Full power but fragile. Works without the Lua bridge.</p>
+      </div>
+    </div>
+    <div class="option" data-choice="structured" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Structured patch format</h3>
+        <p>LLM emits a structured JSON patch: <code>{items: {"Ring 1": {...}}, skills: {...}}</code>. Server validates and applies. Safer, limited to what the parser supports.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle">Select all patchable aspects, then choose XML-only vs structured patches.</p>

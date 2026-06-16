@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pobai",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["apps/pobai-server/src/index.mjs"],
+      "port": 3001
+    }
+  ]
+}

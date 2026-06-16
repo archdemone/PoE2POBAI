@@ -1,0 +1,26 @@
+<h2>Step 3 of 5: Tool Execution</h2>
+<p class="subtitle">The browser needs to run MCP tools. But tools live on the server side.</p>
+
+<div class="options">
+  <div class="option" data-choice="http-api" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>HTTP API endpoints</h3>
+      <p>Add REST endpoints for ALL 8 MCP tools to pobai-server. Browser calls them directly (e.g. <code>GET /api/build/:id/defenses</code>). Clean REST contract, debuggable, no WS tool execution channel needed.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="ws-rpc" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>WebSocket RPC</h3>
+      <p>Browser sends tool execution requests over the existing WS: <code>{type: "tool_call", tool: "get_defenses", args: {...}}</code>. Server executes and sends <code>{type: "tool_result", ...}</code> back. Single connection, no new routes.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="existing-chat" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Keep /api/chat, stream via WS</h3>
+      <p>Server still executes tools (like today). The change is: WS streams progress events so the browser shows each step in real-time. Frontend "drives" visually but server does the work. Simplest migration from current code.</p>
+    </div>
+  </div>
+</div>

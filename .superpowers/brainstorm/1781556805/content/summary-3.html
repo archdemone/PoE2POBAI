@@ -1,0 +1,60 @@
+<h2>Task #3: Design Summary</h2>
+<p class="subtitle">Snapshot Clone/Diff — Architecture</p>
+
+<div style="display:flex;gap:12px;margin-top:12px;">
+  <div style="flex:1;">
+    <h3>Decisions</h3>
+    <table style="width:100%;font-size:0.8em;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;">Capabilities</td><td style="padding:4px;color:#4ade80;">Clone, Diff, What-if, MCP tools</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;">Patchable</td><td style="padding:4px;color:#4ade80;">Items, Skills, Passives, Bandit</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;">Patch format</td><td style="padding:4px;color:#4ade80;">XML modification</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;">Diff output</td><td style="padding:4px;color:#4ade80;">JSON + text + side-by-side UI</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;">Provenance</td><td style="padding:4px;color:#4ade80;">Linked (parent tracking)</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;">Location</td><td style="padding:4px;color:#4ade80;">pob-mcp-server</td></tr>
+    </table>
+  </div>
+  <div style="flex:1;">
+    <h3>New MCP Tools</h3>
+    <table style="width:100%;font-size:0.8em;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#4ade80;">clone_build</td><td style="padding:4px;">Copy snapshot, optional label, returns new ID + parent lineage</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#4ade80;">diff_builds</td><td style="padding:4px;">Compare two snapshots, returns JSON diff + human summary</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#4ade80;">patch_build</td><td style="padding:4px;">Apply XML patch to clone, re-parse, return new snapshot</td></tr>
+      <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#4ade80;">get_build_lineage</td><td style="padding:4px;">Trace clone tree from root to variants</td></tr>
+    </table>
+  </div>
+  <div style="flex:1;">
+    <h3>Flow: What-If</h3>
+    <div style="font-size:0.7em;">
+      <div style="background:#1a1a2e;padding:6px;border-radius:3px;margin:2px 0;"><strong>1.</strong> LLM analyzes build, proposes changes</div>
+      <div style="background:#1a1a2e;padding:6px;border-radius:3px;margin:2px 0;"><strong>2.</strong> LLM emits XML patch (modded items/skills/passives)</div>
+      <div style="background:#0f3460;padding:6px;border-radius:3px;margin:2px 0;"><strong>3.</strong> clone_build(snapshot_id, label="What-if: Ming's swap")</div>
+      <div style="background:#0f3460;padding:6px;border-radius:3px;margin:2px 0;"><strong>4.</strong> patch_build(clone_id, xml_patch)</div>
+      <div style="background:#0f3460;padding:6px;border-radius:3px;margin:2px 0;"><strong>5.</strong> diff_builds(original_id, clone_id)</div>
+      <div style="background:#0f3460;padding:6px;border-radius:3px;margin:2px 0;"><strong>6.</strong> LLM interprets diff, gives recommendation</div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:16px;">
+  <h3>Files Changed</h3>
+  <table style="width:100%;font-size:0.75em;border-collapse:collapse;">
+    <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#888;">pob-mcp-server/src/</td><td style="padding:4px;color:#4ade80;">snapshot-store.ts</td><td style="padding:4px;">Add clone(), diff(), patch(), lineage() methods</td></tr>
+    <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#888;"></td><td style="padding:4px;color:#4ade80;">index.ts</td><td style="padding:4px;">Register 4 new MCP tools</td></tr>
+    <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#888;"></td><td style="padding:4px;color:#4ade80;">src/</td><td style="padding:4px;">New: diff-engine.ts, patch-applier.ts</td></tr>
+    <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#888;">pobai-server/src/</td><td style="padding:4px;color:#4ade80;">index.mjs</td><td style="padding:4px;">Copy MCP tool logic as REST endpoints</td></tr>
+    <tr style="border-bottom:1px solid #333;"><td style="padding:4px;color:#888;">pobai-web/</td><td style="padding:4px;color:#4ade80;">components/</td><td style="padding:4px;">DiffView side-by-side component</td></tr>
+  </table>
+</div>
+
+<div class="section" style="margin-top:16px;">
+  <h3>Tests</h3>
+  <div style="font-size:0.75em;">
+    <div style="background:#16213e;padding:4px;border-radius:2px;margin:2px 0;">Clone preserves all data + links to parent</div>
+    <div style="background:#16213e;padding:4px;border-radius:2px;margin:2px 0;">Diff detects item swaps, skill changes, passive changes</div>
+    <div style="background:#16213e;padding:4px;border-radius:2px;margin:2px 0;">XML patch modifies builds correctly</div>
+    <div style="background:#16213e;padding:4px;border-radius:2px;margin:2px 0;">Lineage traverses full clone tree</div>
+    <div style="background:#16213e;padding:4px;border-radius:2px;margin:2px 0;">Self-diff returns empty (no changes)</div>
+  </div>
+</div>
+
+<p style="margin-top:16px;">Does this design look right?</p>

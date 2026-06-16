@@ -1,0 +1,19 @@
+<h2>Step 4 of 5: Text Streaming</h2>
+<p class="subtitle">When the LLM generates the final response text, how should it appear?</p>
+
+<div class="options">
+  <div class="option" data-choice="token-stream" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Token-by-token streaming</h3>
+      <p>Text appears character by character like ChatGPT. Feels responsive, but requires the LLM provider to support streaming and adds WS message overhead.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="chunk-only" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Step-by-step (no text streaming)</h3>
+      <p>Show tool execution progress in real-time, then display the full LLM response at once. Simpler, less WS traffic, still feels interactive because tool steps fill the gap.</p>
+    </div>
+  </div>
+</div>
