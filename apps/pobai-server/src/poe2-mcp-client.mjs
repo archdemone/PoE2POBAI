@@ -17,16 +17,16 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { randomBytes } from "node:crypto";
-
 const DEFAULT_PYTHON = process.platform === "win32" ? "py" : "python3";
 
 /**
  * Resolve how to launch poe2-mcp: command, args, and the env it needs.
- * poe2-mcp's config makes SECRET_KEY and ENCRYPTION_KEY required — without
- * them it raises on import (the "Connection closed" failure). They only sign/
- * encrypt local trade-auth data we don't use, so a random per-launch value is
- * fine unless the user pins their own via the environment.
+ * Notes:
+ * - poe2-mcp's trade auth requires SECRET_KEY / ENCRYPTION_KEY, but PoBAI
+ *   doesn't use trade features. Only pass these through from the environment
+ *   if the user explicitly set them — don't inject random values.
+ * - Users who want trade auth can set SECRET_KEY and ENCRYPTION_KEY in their
+ *   environment before starting the PoBAI server.
  */
 function resolvePoe2McpLaunch() {
   const command = process.env.POE2_MCP_COMMAND ?? DEFAULT_PYTHON;
@@ -35,11 +35,7 @@ function resolvePoe2McpLaunch() {
     : process.env.POE2_MCP_COMMAND
       ? []
       : ["-m", "src.mcp_server"];
-  const env = {
-    ...process.env,
-    SECRET_KEY: process.env.SECRET_KEY ?? randomBytes(32).toString("hex"),
-    ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ?? randomBytes(32).toString("hex"),
-  };
+  const env = { ...process.env };
   return { command, args, env };
 }
 

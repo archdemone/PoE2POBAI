@@ -35,6 +35,16 @@ let pobaiPort;
 let pobaiProc;
 let dataDir;
 let buildId;
+let targetBuildId;
+
+async function postJson(path, body) {
+  const res = await fetch(`http://localhost:${pobaiPort}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return { res, data: await res.json() };
+}
 
 beforeAll(async () => {
   pobaiPort = await getFreePort();
@@ -81,20 +91,53 @@ beforeAll(async () => {
     <Tree treeVersion="2.1.0"><Node id="1234" /><Node id="5678" /><Node id="9012" /></Tree>
   </PathOfBuilding2>`;
 
-  const res = await fetch(`http://localhost:${pobaiPort}/api/build/import`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      source: "pob-xml",
-      payload: pobXml,
-    }),
+  const { data } = await postJson("/api/build/import", {
+    source: "pob-xml",
+    label: "Base Ranger",
+    payload: pobXml,
   });
-  const data = await res.json();
   buildId = data.snapshot.id;
+
+  const targetXml = `<PathOfBuilding2>
+    <Build characterName="TargetRanger" className="Ranger" ascendClassName="Deadeye" level="88" league="Standard" />
+    <PlayerStat stat="Life" value="3500" />
+    <PlayerStat stat="EnergyShield" value="500" />
+    <PlayerStat stat="Armour" value="6000" />
+    <PlayerStat stat="Evasion" value="6500" />
+    <PlayerStat stat="FireResist" value="80" />
+    <PlayerStat stat="ColdResist" value="70" />
+    <PlayerStat stat="LightningResist" value="75" />
+    <PlayerStat stat="ChaosResist" value="20" />
+    <Skill slot="1" label="Lightning Arrow" enabled="true" mainActiveSkill="LightningArrow">
+      <Gem nameSpec="Lightning Arrow" level="21" quality="20" enabled="true" />
+      <Gem nameSpec="Greater Multiple Projectiles" level="20" quality="20" enabled="true" support="true" />
+      <Gem nameSpec="Fork" level="20" support="true" />
+    </Skill>
+    <Skill slot="3" label="Wind Dancer" enabled="true">
+      <Gem nameSpec="Wind Dancer" level="18" enabled="true" />
+    </Skill>
+    <Item id="1" slot="Weapon 1" rarity="Rare">
+      <Name>Storm Song</Name>
+      <TypeLine>Expert Dualstring Bow</TypeLine>
+    </Item>
+    <Item id="2" slot="Body Armour" rarity="Rare">
+      <Name>Ranger's Vest</Name>
+      <TypeLine>Assassin's Garb</TypeLine>
+    </Item>
+    <Tree treeVersion="2.1.0"><Node id="1234" /><Node id="5678" /><Node id="9999" /><Node id="2222" /></Tree>
+  </PathOfBuilding2>`;
+
+  const target = await postJson("/api/build/import", {
+    source: "pob-xml",
+    label: "Target Ranger",
+    payload: targetXml,
+  });
+  targetBuildId = target.data.snapshot.id;
 }, 20_000);
 
 afterAll(async () => {
   if (buildId) await fetch(`http://localhost:${pobaiPort}/api/build/${buildId}`, { method: "DELETE" });
+  if (targetBuildId) await fetch(`http://localhost:${pobaiPort}/api/build/${targetBuildId}`, { method: "DELETE" });
   pobaiProc?.kill();
 });
 
@@ -137,5 +180,70 @@ describe("REST tool endpoints", () => {
   it("GET /api/build/:id/skills returns 404 for unknown ID", async () => {
     const res = await fetch(`http://localhost:${pobaiPort}/api/build/nonexistent/skills`);
     expect(res.status).toBe(404);
+  });
+
+  it("POST /api/build/compare returns a side-by-side comparison", async () => {
+    const { res, data } = await postJson("/api/build/compare", {
+      baseId: buildId,
+      targetId: targetBuildId,
+    });
+
+    expect(res.status).toBe(200);
+    expect(data.base.id).toBe(buildId);
+    expect(data.target.id).toBe(targetBuildId);
+    expect(data.character.fields.some((field) => field.key === "level" && field.status === "changed")).toBe(true);
+    expect(data.skills.counts.changed).toBeGreaterThanOrEqual(1);
+    expect(data.items.rows.find((row) => row.key === "weapon1")?.status).toBe("changed");
+    expect(data.passiveTree.addedNodeIds).toEqual(["2222", "9999"]);
+    expect(data.passiveTree.removedNodeIds).toEqual(["9012"]);
+    expect(data.defenses.stats.length).toBeGreaterThan(0);
+  });
+
+  it("POST /api/build/compare returns 404 for missing snapshot IDs", async () => {
+    const { res, data } = await postJson("/api/build/compare", {
+      baseId: buildId,
+      targetId: "missing-target",
+    });
+
+    expect(res.status).toBe(404);
+    expect(data.missingIds).toEqual(["missing-target"]);
+  });
+
+  it("POST /api/build/compare includes numeric stat deltas and green/red metadata", async () => {
+    const { data } = await postJson("/api/build/compare", {
+      baseId: buildId,
+      targetId: targetBuildId,
+    });
+
+    const life = data.statDiffs.find((stat) => stat.label === "Life");
+    expect(life).toMatchObject({
+      type: "numeric",
+      baseValue: 3200,
+      targetValue: 3500,
+      delta: 300,
+      direction: "increase",
+      higherIsBetter: true,
+      impact: "better",
+      color: "green",
+      status: "changed",
+    });
+    expect(life.percentDelta).toBeCloseTo(9.375, 3);
+  });
+
+  it("POST /api/build/import accepts legacy code while keeping payload canonical", async () => {
+    const legacyXml = `<PathOfBuilding2>
+      <Build characterName="LegacyImport" className="Monk" level="70" />
+      <PlayerStat stat="Life" value="2500" />
+    </PathOfBuilding2>`;
+
+    const { res, data } = await postJson("/api/build/import", {
+      source: "pob-xml",
+      label: "Legacy Code Import",
+      code: legacyXml,
+    });
+
+    expect(res.status).toBe(201);
+    expect(data.snapshot.summary.character.name).toBe("LegacyImport");
+    await fetch(`http://localhost:${pobaiPort}/api/build/${data.snapshot.id}`, { method: "DELETE" });
   });
 });

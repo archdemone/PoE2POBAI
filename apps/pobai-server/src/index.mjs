@@ -4,14 +4,15 @@ import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseBuild } from "@pobai/parser";
 import { Poe2McpClient } from "./poe2-mcp-client.mjs";
 import { resolveToXml, ImportError } from "./import-resolver.mjs";
-import { createWsHandler } from "./ws-handler.mjs";
 
 // PORT is set by Render/Railway; POBAI_SERVER_PORT is the local dev override
 const port = Number(process.env.PORT ?? process.env.POBAI_SERVER_PORT ?? 3001);
 const host = process.env.POBAI_SERVER_HOST ?? "0.0.0.0";
 const openRouterBaseUrl = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1";
+const POB2_BRIDGE_URL = process.env.POB2_BRIDGE_URL ?? "http://127.0.0.1:22804";
 
 const poe2Mcp = new Poe2McpClient();
 // Serve from docs/ (production build) when available, otherwise apps/pobai-web/ (dev)
@@ -75,13 +76,6 @@ async function deleteSnapshot(snapshotId) {
   }
 }
 
-async function getPayload(snapshotId) {
-  if (payloads.has(snapshotId)) return payloads.get(snapshotId);
-  const payload = await readFile(payloadPath(snapshotId), "utf8");
-  payloads.set(snapshotId, payload);
-  return payload;
-}
-
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
@@ -119,7 +113,8 @@ function validateImportPayload(body) {
   const validSources = new Set(["pob-code", "pob-xml", "poe-ninja", "ggg-profile"]);
   if (!body || typeof body !== "object") return "Request body must be a JSON object.";
   if (!validSources.has(body.source)) return "source must be one of pob-code, pob-xml, poe-ninja, or ggg-profile.";
-  if (typeof body.payload !== "string" || body.payload.trim().length === 0) return "payload is required.";
+  const payload = typeof body.payload === "string" ? body.payload : body.code;
+  if (typeof payload !== "string" || payload.trim().length === 0) return "payload is required.";
   if (body.label !== undefined && (typeof body.label !== "string" || body.label.trim().length === 0 || body.label.length > 120)) {
     return "label must be a non-empty string up to 120 characters when provided.";
   }
@@ -138,221 +133,290 @@ function validateChatPayload(body) {
   return null;
 }
 
-function decodeXml(value = "") {
-  return value
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
+function validateComparePayload(body) {
+  if (!body || typeof body !== "object") return "Request body must be a JSON object.";
+  if (typeof body.baseId !== "string" || body.baseId.trim().length === 0) return "baseId is required.";
+  if (typeof body.targetId !== "string" || body.targetId.trim().length === 0) return "targetId is required.";
+  return null;
 }
 
-function parseAttributes(text = "") {
-  const attributes = {};
-  for (const match of text.matchAll(/([A-Za-z_:][\w:.-]*)\s*=\s*"([^"]*)"/g)) {
-    attributes[match[1]] = decodeXml(match[2]);
-  }
-  return attributes;
+function normalizeCompareKey(value) {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
-function firstTagAttributes(xml, tagName) {
-  const match = xml.match(new RegExp(`<${tagName}\\b([^>]*)>`, "i"));
-  return match ? parseAttributes(match[1]) : {};
+function displayValue(value) {
+  return value === undefined || value === null ? null : value;
 }
 
-function collectTagAttributes(xml, tagName) {
-  return [...xml.matchAll(new RegExp(`<${tagName}\\b([^>]*)/?>`, "gi"))].map((match) => parseAttributes(match[1]));
+function parseNumericValue(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().replace(/,/g, "");
+  if (!/^[-+]?\d+(?:\.\d+)?%?$/.test(normalized)) return null;
+  return Number(normalized.replace(/%$/, ""));
 }
 
-function collectBlocks(xml, tagName) {
-  return [...xml.matchAll(new RegExp(`<${tagName}\\b([^>]*)>([\\s\\S]*?)</${tagName}>`, "gi"))].map((match) => ({
-    attributes: parseAttributes(match[1]),
-    body: match[2],
-  }));
-}
+function compareValue(key, baseRaw, targetRaw, options = {}) {
+  const basePresent = baseRaw !== undefined && baseRaw !== null && baseRaw !== "";
+  const targetPresent = targetRaw !== undefined && targetRaw !== null && targetRaw !== "";
+  const baseNumeric = parseNumericValue(baseRaw);
+  const targetNumeric = parseNumericValue(targetRaw);
 
-function textFromTag(body, tagName) {
-  const match = body.match(new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)</${tagName}>`, "i"));
-  return match ? decodeXml(match[1].replace(/<[^>]*>/g, "").trim()) : "";
-}
-
-function compact(value) {
-  return value === undefined || value === null || value === "" ? undefined : value;
-}
-
-function inferPayloadKind(payload) {
-  if (/^\s*</.test(payload) && /PathOfBuilding/i.test(payload)) return "pob-xml";
-  if (/^https?:\/\//i.test(payload)) return "url";
-  return "opaque-code";
-}
-
-function parseBuildSummary(payload, source) {
-  const kind = inferPayloadKind(payload);
-  const warnings = [];
-  const summary = {
-    kind,
-    character: {},
-    skills: [],
-    items: [],
-    passiveTree: {},
-    defenses: {},
-    detectedTerms: [],
-    warnings,
-  };
-
-  if (kind !== "pob-xml") {
-    warnings.push("Payload is not recognizable XML, so PoBAI stored metadata only. Paste a PoB XML export for local parsing before MCP is connected.");
-    if (source === "poe-ninja" || kind === "url") warnings.push("URL import resolution is planned for the MCP integration milestone.");
-    return summary;
-  }
-
-  const build = firstTagAttributes(payload, "Build");
-  const player = firstTagAttributes(payload, "Player");
-  const spec = firstTagAttributes(payload, "Spec");
-  summary.character = {
-    name: compact(build.characterName || build.name || player.name),
-    className: compact(build.className || build.class || player.className || player.class),
-    ascendancy: compact(build.ascendClassName || build.ascendancyName || spec.ascendClassName),
-    level: compact(build.level || player.level),
-    league: compact(build.league || player.league),
-  };
-
-  const statCandidates = [
-    ...collectTagAttributes(payload, "PlayerStat"),
-    ...collectTagAttributes(payload, "Stat"),
-    ...collectTagAttributes(payload, "Mod"),
-  ];
-  const defenseKeys = ["life", "energyshield", "energy_shield", "es", "armour", "armor", "evasion", "block", "fire", "cold", "lightning", "chaos", "resistance", "resist"];
-  for (const stat of statCandidates) {
-    const key = String(stat.stat || stat.name || stat.id || "").toLowerCase();
-    const value = compact(stat.value || stat.val || stat.total || stat.amount);
-    if (!key || value === undefined) continue;
-    if (defenseKeys.some((defenseKey) => key.includes(defenseKey))) {
-      summary.defenses[stat.stat || stat.name || stat.id] = value;
-    }
-  }
-
-  const itemBlocks = collectBlocks(payload, "Item");
-  summary.items = itemBlocks.slice(0, 80).map((item, index) => {
-    const rawText = decodeXml(item.body.replace(/<[^>]+>/g, "\n")).split("\n").map((line) => line.trim()).filter(Boolean);
+  if (!basePresent && targetPresent) {
     return {
-      id: compact(item.attributes.id || item.attributes.itemId || String(index + 1)),
-      slot: compact(item.attributes.slot || item.attributes.inventoryId || item.attributes.location),
-      name: compact(textFromTag(item.body, "Name") || item.attributes.name || rawText[0]),
-      typeLine: compact(textFromTag(item.body, "TypeLine") || item.attributes.typeLine || rawText[1]),
-      rarity: compact(item.attributes.rarity),
+      key,
+      label: options.label ?? key,
+      category: options.category ?? "stat",
+      type: targetNumeric === null ? "text" : "numeric",
+      baseValue: null,
+      targetValue: displayValue(targetRaw),
+      delta: null,
+      percentDelta: null,
+      direction: "added",
+      changed: true,
+      status: "added",
+      higherIsBetter: options.higherIsBetter ?? null,
+      impact: options.higherIsBetter === true ? "better" : "changed",
+      color: options.higherIsBetter === true ? "green" : "neutral",
     };
-  }).filter((item) => item.name || item.typeLine || item.slot);
+  }
 
-  const skillBlocks = collectBlocks(payload, "Skill");
-  summary.skills = skillBlocks.slice(0, 40).map((skill, index) => {
-    const gems = collectTagAttributes(skill.body, "Gem").map((gem) => ({
-      name: compact(gem.nameSpec || gem.name || gem.gemId || gem.skillId),
-      level: compact(gem.level),
-      quality: compact(gem.quality || gem.qualityId),
-      enabled: compact(gem.enabled),
-      support: compact(gem.support || gem.supportGem),
-    })).filter((gem) => gem.name);
-    const mainGem = gems.find((gem) => !String(gem.support).match(/^(true|1)$/i)) || gems[0];
+  if (basePresent && !targetPresent) {
     return {
-      id: compact(skill.attributes.slot || skill.attributes.id || String(index + 1)),
-      label: compact(skill.attributes.label || skill.attributes.name || mainGem?.name || `Skill group ${index + 1}`),
-      enabled: compact(skill.attributes.enabled),
-      mainActiveSkill: compact(skill.attributes.mainActiveSkill),
-      gems,
+      key,
+      label: options.label ?? key,
+      category: options.category ?? "stat",
+      type: baseNumeric === null ? "text" : "numeric",
+      baseValue: displayValue(baseRaw),
+      targetValue: null,
+      delta: null,
+      percentDelta: null,
+      direction: "removed",
+      changed: true,
+      status: "removed",
+      higherIsBetter: options.higherIsBetter ?? null,
+      impact: options.higherIsBetter === true ? "worse" : "changed",
+      color: options.higherIsBetter === true ? "red" : "neutral",
     };
-  }).filter((skill) => skill.gems.length > 0 || skill.label);
+  }
 
-  const tree = firstTagAttributes(payload, "Tree");
-  const url = textFromTag(payload, "URL") || tree.url;
-  const nodes = collectTagAttributes(payload, "Node");
-  summary.passiveTree = {
-    url: compact(url),
-    treeVersion: compact(tree.treeVersion || spec.treeVersion),
-    allocatedNodeCount: nodes.length || undefined,
+  if (baseNumeric !== null && targetNumeric !== null) {
+    const delta = targetNumeric - baseNumeric;
+    const percentDelta = baseNumeric === 0 ? null : (delta / Math.abs(baseNumeric)) * 100;
+    const direction = delta > 0 ? "increase" : delta < 0 ? "decrease" : "unchanged";
+    let impact = delta === 0 ? "neutral" : "changed";
+    if (options.higherIsBetter === true) impact = delta > 0 ? "better" : delta < 0 ? "worse" : "neutral";
+    if (options.higherIsBetter === false) impact = delta < 0 ? "better" : delta > 0 ? "worse" : "neutral";
+    const color = impact === "better" ? "green" : impact === "worse" ? "red" : "neutral";
+
+    return {
+      key,
+      label: options.label ?? key,
+      category: options.category ?? "stat",
+      type: "numeric",
+      baseValue: baseNumeric,
+      targetValue: targetNumeric,
+      baseRaw: displayValue(baseRaw),
+      targetRaw: displayValue(targetRaw),
+      delta,
+      percentDelta,
+      direction,
+      changed: delta !== 0,
+      status: delta === 0 ? "unchanged" : "changed",
+      higherIsBetter: options.higherIsBetter ?? null,
+      impact,
+      color,
+    };
+  }
+
+  const changed = String(baseRaw ?? "") !== String(targetRaw ?? "");
+  return {
+    key,
+    label: options.label ?? key,
+    category: options.category ?? "stat",
+    type: "text",
+    baseValue: displayValue(baseRaw),
+    targetValue: displayValue(targetRaw),
+    delta: null,
+    percentDelta: null,
+    direction: changed ? "changed" : "unchanged",
+    changed,
+    status: changed ? "changed" : "unchanged",
+    higherIsBetter: null,
+    impact: changed ? "changed" : "neutral",
+    color: "neutral",
   };
-
-  const lowerPayload = payload.toLowerCase();
-  for (const term of ["twister", "trinity", "fire", "cold", "lightning", "chaos", "armour", "evasion", "block", "energy shield", "resistance"]) {
-    if (lowerPayload.includes(term)) summary.detectedTerms.push(term);
-  }
-
-  if (summary.skills.length === 0) warnings.push("No skill groups were parsed from this XML. The export may use tags this lightweight parser does not yet recognize.");
-  if (summary.items.length === 0) warnings.push("No equipped/custom items were parsed from this XML. MCP/PoB import will be needed for complete item inspection.");
-  if (Object.keys(summary.defenses).length === 0) warnings.push("No defense totals were found in the XML. Exact defenses require PoB/MCP calculations.");
-
-  return summary;
 }
 
-function parsePatchLine(line) {
-  const t = line.trim();
-  const m = t.match(/^<(\w+)\s+([^>]*)\/?>$/);
-  if (!m) return null;
-  const attrs = {};
-  for (const a of m[2].matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) {
-    attrs[a[1]] = a[2];
-  }
-  return { tag: m[1], attrs };
+function countStatuses(rows) {
+  return rows.reduce(
+    (counts, row) => {
+      counts[row.status] = (counts[row.status] ?? 0) + 1;
+      return counts;
+    },
+    { added: 0, removed: 0, changed: 0, unchanged: 0 }
+  );
 }
 
-function applyXmlPatch(xml, patchStr) {
-  let result = xml;
-  const lines = patchStr.split("\n").map((l) => l.trim()).filter(Boolean);
-  for (const line of lines) {
-    const instr = parsePatchLine(line);
-    if (!instr) continue;
-    if (instr.tag === "ReplaceAttr" && instr.attrs.selector && instr.attrs.name && instr.attrs.value !== undefined) {
-      const re = new RegExp(`(<${instr.attrs.selector}\\b[^>]*\\b)${instr.attrs.name}="[^"]*"`, "i");
-      if (re.test(result)) {
-        result = result.replace(re, `$1${instr.attrs.name}="${instr.attrs.value}"`);
-      } else {
-        result = result.replace(new RegExp(`(<${instr.attrs.selector}\\b)`, "i"), `$1${instr.attrs.name}="${instr.attrs.value}" `);
-      }
-    }
-    if (instr.tag === "ReplaceDefense" && instr.attrs.name && instr.attrs.value !== undefined) {
-      const re = new RegExp(`(<PlayerStat[^>]*\\b)${instr.attrs.name}="[^"]*"`, "i");
-      if (re.test(result)) {
-        result = result.replace(re, `$1${instr.attrs.name}="${instr.attrs.value}"`);
-      } else {
-        result = result.replace(/(<PlayerStat\b)/i, `$1 ${instr.attrs.name}="${instr.attrs.value}"`);
-      }
-    }
-  }
-  return result === xml ? null : result;
+function compareRecord(baseRecord = {}, targetRecord = {}, options = {}) {
+  const baseByKey = new Map();
+  const targetByKey = new Map();
+  for (const [key, value] of Object.entries(baseRecord ?? {})) baseByKey.set(normalizeCompareKey(key), { key, value });
+  for (const [key, value] of Object.entries(targetRecord ?? {})) targetByKey.set(normalizeCompareKey(key), { key, value });
+
+  const rows = [...new Set([...baseByKey.keys(), ...targetByKey.keys()])]
+    .sort((a, b) => {
+      const left = baseByKey.get(a)?.key ?? targetByKey.get(a)?.key ?? a;
+      const right = baseByKey.get(b)?.key ?? targetByKey.get(b)?.key ?? b;
+      return left.localeCompare(right);
+    })
+    .map((normalizedKey) => {
+      const base = baseByKey.get(normalizedKey);
+      const target = targetByKey.get(normalizedKey);
+      const label = target?.key ?? base?.key ?? normalizedKey;
+      return compareValue(normalizedKey, base?.value, target?.value, { ...options, label });
+    });
+
+  return { rows, counts: countStatuses(rows), changed: rows.some((row) => row.changed) };
 }
 
-function computeSnapshotDiff(xml1, xml2, id1, id2) {
-  const skills1 = collectBlocks(xml1, "Skill");
-  const skills2 = collectBlocks(xml2, "Skill");
-  const items1 = collectBlocks(xml1, "Item");
-  const items2 = collectBlocks(xml2, "Item");
-
-  const skillKey = (s) => s.attributes.label || textFromTag(s.body, "Name") || "unknown";
-  const sk1 = new Set(skills1.map(skillKey));
-  const sk2 = new Set(skills2.map(skillKey));
-  const skillsRemoved = skills1.filter((s) => !sk2.has(skillKey(s))).map((s) => ({ label: skillKey(s), gems: collectTagAttributes(s.body, "Gem").map((g) => g.nameSpec || g.name || "").filter(Boolean) }));
-  const skillsAdded = skills2.filter((s) => !sk1.has(skillKey(s))).map((s) => ({ label: skillKey(s), gems: collectTagAttributes(s.body, "Gem").map((g) => g.nameSpec || g.name || "").filter(Boolean) }));
-
-  const itemKey = (i) => i.attributes.slot || textFromTag(i.body, "Name") || "unknown";
-  const ik1 = new Set(items1.map(itemKey));
-  const ik2 = new Set(items2.map(itemKey));
-  const itemsRemoved = items1.filter((i) => !ik2.has(itemKey(i))).map((i) => ({ slot: i.attributes.slot, name: textFromTag(i.body, "Name") }));
-  const itemsAdded = items2.filter((i) => !ik1.has(itemKey(i))).map((i) => ({ slot: i.attributes.slot, name: textFromTag(i.body, "Name") }));
-
-  const nodes1 = new Set(collectTagAttributes(xml1, "Node").map((n) => n.id || n.nodeId).filter(Boolean));
-  const nodes2 = new Set(collectTagAttributes(xml2, "Node").map((n) => n.id || n.nodeId).filter(Boolean));
-  const nodesAdded = [...nodes2].filter((n) => !nodes1.has(n)).length;
-  const nodesRemoved = [...nodes1].filter((n) => !nodes2.has(n)).length;
-
-  const defs1 = firstTagAttributes(xml1, "PlayerStat");
-  const defs2 = firstTagAttributes(xml2, "PlayerStat");
-  const defensesChanged = {};
-  for (const key of new Set([...Object.keys(defs1), ...Object.keys(defs2)])) {
-    if (defs1[key] !== defs2[key]) defensesChanged[key] = { from: defs1[key], to: defs2[key] };
-  }
-
-  return { baseId: id1, targetId: id2, skillsAdded, skillsRemoved, itemsAdded, itemsRemoved, defensesChanged, passivesChanged: { nodesAdded, nodesRemoved } };
+function snapshotMetadata(snapshot) {
+  return {
+    id: snapshot.id,
+    label: snapshot.label,
+    source: snapshot.source,
+    createdAt: snapshot.createdAt,
+    hash: snapshot.hash,
+    sizeBytes: snapshot.sizeBytes,
+    character: snapshot.summary?.character ?? {},
+  };
 }
+
+function simplifySkill(skill = {}) {
+  return {
+    id: skill.id,
+    label: skill.label,
+    enabled: skill.enabled,
+    mainActiveSkill: skill.mainActiveSkill,
+    gems: (skill.gems ?? []).map((gem) => ({
+      name: gem.name,
+      level: gem.level,
+      quality: gem.quality,
+      enabled: gem.enabled,
+      support: gem.support,
+    })),
+  };
+}
+
+function simplifyItem(item = {}) {
+  return {
+    id: item.id,
+    slot: item.slot,
+    name: item.name,
+    typeLine: item.typeLine,
+    rarity: item.rarity,
+  };
+}
+
+function signature(value) {
+  return JSON.stringify(value ?? null);
+}
+
+function indexCollection(items, keyFn, simplifyFn) {
+  const indexed = new Map();
+  items.forEach((item, index) => {
+    const key = keyFn(item, index);
+    indexed.set(key, { key, value: simplifyFn(item), index });
+  });
+  return indexed;
+}
+
+function compareCollection(baseItems = [], targetItems = [], keyFn, simplifyFn) {
+  const baseByKey = indexCollection(baseItems, keyFn, simplifyFn);
+  const targetByKey = indexCollection(targetItems, keyFn, simplifyFn);
+  const rows = [...new Set([...baseByKey.keys(), ...targetByKey.keys()])]
+    .sort()
+    .map((key) => {
+      const base = baseByKey.get(key)?.value ?? null;
+      const target = targetByKey.get(key)?.value ?? null;
+      let status = "unchanged";
+      if (!base) status = "added";
+      else if (!target) status = "removed";
+      else if (signature(base) !== signature(target)) status = "changed";
+      return { key, status, changed: status !== "unchanged", base, target };
+    });
+
+  return { rows, counts: countStatuses(rows), changed: rows.some((row) => row.changed) };
+}
+
+function skillCompareKey(skill, index) {
+  return normalizeCompareKey(skill?.id || skill?.label || skill?.mainActiveSkill || skill?.gems?.[0]?.name || `skill-${index + 1}`);
+}
+
+function itemCompareKey(item, index) {
+  return normalizeCompareKey(item?.slot || item?.name || item?.typeLine || item?.id || `item-${index + 1}`);
+}
+
+function compareCharacter(baseCharacter = {}, targetCharacter = {}) {
+  const fields = compareRecord(baseCharacter, targetCharacter, { category: "character" }).rows.map((row) => {
+    if (row.key === "level") return compareValue(row.key, row.baseValue, row.targetValue, { label: row.label, category: "character", higherIsBetter: true });
+    return row;
+  });
+  return { fields, counts: countStatuses(fields), changed: fields.some((field) => field.changed) };
+}
+
+function comparePassiveTree(baseTree = {}, targetTree = {}) {
+  const baseIds = new Set(baseTree.allocatedNodeIds ?? []);
+  const targetIds = new Set(targetTree.allocatedNodeIds ?? []);
+  const addedNodeIds = [...targetIds].filter((id) => !baseIds.has(id)).sort();
+  const removedNodeIds = [...baseIds].filter((id) => !targetIds.has(id)).sort();
+  const sharedNodeIds = [...baseIds].filter((id) => targetIds.has(id)).sort();
+  const allocatedNodeCount = compareValue(
+    "allocatedNodeCount",
+    baseTree.allocatedNodeCount ?? (baseIds.size || undefined),
+    targetTree.allocatedNodeCount ?? (targetIds.size || undefined),
+    { label: "Allocated nodes", category: "passiveTree" }
+  );
+  const treeVersion = compareValue("treeVersion", baseTree.treeVersion, targetTree.treeVersion, {
+    label: "Tree version",
+    category: "passiveTree",
+  });
+  const url = compareValue("url", baseTree.url, targetTree.url, { label: "Tree URL", category: "passiveTree" });
+
+  return {
+    base: baseTree,
+    target: targetTree,
+    allocatedNodeCount,
+    treeVersion,
+    url,
+    addedNodeIds,
+    removedNodeIds,
+    sharedNodeCount: sharedNodeIds.length,
+    changed: allocatedNodeCount.changed || treeVersion.changed || url.changed || addedNodeIds.length > 0 || removedNodeIds.length > 0,
+  };
+}
+
+function compareSnapshots(baseSnapshot, targetSnapshot) {
+  const character = compareCharacter(baseSnapshot.summary?.character, targetSnapshot.summary?.character);
+  const defenses = compareRecord(baseSnapshot.summary?.defenses, targetSnapshot.summary?.defenses, {
+    category: "defense",
+    higherIsBetter: true,
+  });
+  const passiveTree = comparePassiveTree(baseSnapshot.summary?.passiveTree, targetSnapshot.summary?.passiveTree);
+
+  return {
+    base: snapshotMetadata(baseSnapshot),
+    target: snapshotMetadata(targetSnapshot),
+    character,
+    skills: compareCollection(baseSnapshot.summary?.skills, targetSnapshot.summary?.skills, skillCompareKey, simplifySkill),
+    items: compareCollection(baseSnapshot.summary?.items, targetSnapshot.summary?.items, itemCompareKey, simplifyItem),
+    passiveTree,
+    defenses: { stats: defenses.rows, counts: defenses.counts, changed: defenses.changed },
+    statDiffs: defenses.rows,
+  };
+}
+
+
 
 function buildSnapshotContext(snapshot) {
   if (!snapshot) return "No build snapshot is currently selected.";
@@ -479,10 +543,14 @@ function buildEvidence(snapshot, question = "") {
 const LOCAL_TOOL_NAMES = new Set([
   "list_builds", "get_build_summary", "get_skills",
   "get_items", "get_defenses", "get_passive_tree",
-  "clone_build", "diff_builds", "get_lineage", "apply_build_patch",
 ]);
 
-/** Merge our local tools with whatever poe2-mcp has connected. */
+const POBAI_BRIDGE_TOOL_NAMES = new Set([
+  "pob2_get_calcs", "pob2_export_build",
+  "pob2_test_gem_swap", "pob2_test_item_swap", "pob2_test_passive_change",
+]);
+
+/** Merge our local tools with PoB2 bridge tools and whatever poe2-mcp has connected. */
 function getToolDefinitions() {
   return [...BASE_TOOL_DEFINITIONS, ...poe2Mcp.toLlmToolDefinitions()];
 }
@@ -567,63 +635,65 @@ const BASE_TOOL_DEFINITIONS = [
       },
     },
   },
+  // --- PoB2 live bridge tools ---
   {
     type: "function",
     function: {
-      name: "clone_build",
-      description: "Clone an existing build snapshot. Creates a copy with a new ID and parent link.",
+      name: "pob2_get_calcs",
+      description: "Get the current PoB2 build's exact calculated stats (CombinedDPS, Life, Energy Shield, Armour, Evasion, LifeRegenRecovery, Minion DPS, etc.). Requires the PoB2 bridge to be connected and PoB2 running.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "pob2_export_build",
+      description: "Export the current PoB2 build as full XML and export code. Returns the raw build data, build name, and current calculated stats. Use this first to get the current state before making modifications.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "pob2_test_gem_swap",
+      description: "Test swapping a gem by importing a full modified PoB2 build XML document. Do not pass partial <Skill> XML; the current bridge imports whole builds and may replace the active PoB2 build until you restore the original XML.",
       parameters: {
         type: "object",
         properties: {
-          snapshot_id: { type: "string", description: "The snapshot ID to clone." },
-          label: { type: "string", description: "Optional label for the cloned build." },
+          build_xml: { type: "string", description: "Full PoB2 XML export containing <PathOfBuilding2> and <Build>, with the swapped gem(s) already applied" },
+          slot_name: { type: "string", description: "Which skill group slot was modified (e.g. 'Skill 1')" },
         },
-        required: ["snapshot_id"],
+        required: ["build_xml", "slot_name"],
       },
     },
   },
   {
     type: "function",
     function: {
-      name: "diff_builds",
-      description: "Compare two build snapshots and return a structured diff: skills, items, defenses, and passive nodes added/removed/changed.",
+      name: "pob2_test_item_swap",
+      description: "Test replacing an item by importing a full modified PoB2 build XML document. Do not pass partial <Item> XML; the current bridge imports whole builds and may replace the active PoB2 build until you restore the original XML.",
       parameters: {
         type: "object",
         properties: {
-          base_snapshot_id: { type: "string", description: "The original snapshot ID." },
-          target_snapshot_id: { type: "string", description: "The modified snapshot ID to compare." },
+          build_xml: { type: "string", description: "Full PoB2 XML export containing <PathOfBuilding2> and <Build>, with the replacement item already applied" },
+          slot: { type: "string", description: "Equipment slot being replaced (e.g. 'Weapon 1', 'Helm', 'Body Armour')" },
         },
-        required: ["base_snapshot_id", "target_snapshot_id"],
+        required: ["build_xml", "slot"],
       },
     },
   },
   {
     type: "function",
     function: {
-      name: "get_lineage",
-      description: "Get the clone/patch ancestry chain for a build snapshot, from newest to oldest.",
+      name: "pob2_test_passive_change",
+      description: "Test passive tree changes by importing a full modified PoB2 build XML document. Do not pass partial passive fragments; the current bridge imports whole builds and may replace the active PoB2 build until you restore the original XML.",
       parameters: {
         type: "object",
         properties: {
-          snapshot_id: { type: "string", description: "The snapshot ID to trace." },
+          build_xml: { type: "string", description: "Full PoB2 XML export containing <PathOfBuilding2> and <Build>, with modified passive tree nodes already applied" },
+          note: { type: "string", description: "Optional description of what nodes were changed" },
         },
-        required: ["snapshot_id"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "apply_build_patch",
-      description: "Apply an XML patch to a build snapshot and create a new patched snapshot (what-if). Patch uses XML instruction syntax: <ReplaceAttr selector=\"Build\" name=\"className\" value=\"...\"/>, <ReplaceDefense name=\"Life\" value=\"5000\"/>.",
-      parameters: {
-        type: "object",
-        properties: {
-          snapshot_id: { type: "string", description: "The snapshot ID to patch." },
-          patch: { type: "string", description: "XML patch instructions (one per line)." },
-          label: { type: "string", description: "Optional label for the patched build." },
-        },
-        required: ["snapshot_id", "patch"],
+        required: ["build_xml"],
       },
     },
   },
@@ -688,87 +758,95 @@ function executeLocalTool(name, args) {
     return snap.summary.passiveTree;
   }
 
-  if (name === "clone_build") {
-    const original = args?.snapshot_id ? snapshots.get(args.snapshot_id) : undefined;
-    if (!original) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
-    const payload = payloads.get(original.id);
-    if (!payload) return { error: "Payload not available in memory" };
-    const clone = {
-      ...original,
-      id: randomUUID(),
-      createdAt: new Date().toISOString(),
-      label: args?.label?.trim() || `${original.label} (clone)`,
-      parentId: original.id,
-    };
-    delete clone.parentId; clone.parentId = original.id;
-    snapshots.set(clone.id, clone);
-    payloads.set(clone.id, payload);
-    persistSnapshot(clone, payload);
-    return { snapshot_id: clone.id, label: clone.label, parent_id: clone.parentId, created_at: clone.createdAt };
-  }
-
-  if (name === "diff_builds") {
-    const id1 = args?.base_snapshot_id;
-    const id2 = args?.target_snapshot_id;
-    if (!id1 || !id2) return { error: "base_snapshot_id and target_snapshot_id required" };
-    const s1 = snapshots.get(id1);
-    const s2 = snapshots.get(id2);
-    if (!s1 || !s2) return { error: "One or both snapshots not found" };
-    const p1 = payloads.get(id1);
-    const p2 = payloads.get(id2);
-    if (!p1 || !p2) return { error: "Payloads not available in memory" };
-    return computeSnapshotDiff(p1, p2, id1, id2);
-  }
-
-  if (name === "get_lineage") {
-    const id = args?.snapshot_id;
-    if (!id) return { error: "snapshot_id required" };
-    const start = snapshots.get(id);
-    if (!start) return { error: `No build found with snapshot_id: ${id}` };
-    const entries = [];
-    let current = start;
-    while (current) {
-      entries.push({ id: current.id, label: current.label, createdAt: current.createdAt, parentId: current.parentId });
-      current = current.parentId ? snapshots.get(current.parentId) : undefined;
-    }
-    return entries;
-  }
-
-  if (name === "apply_build_patch") {
-    const original = args?.snapshot_id ? snapshots.get(args.snapshot_id) : undefined;
-    if (!original) return { error: `No build found with snapshot_id: ${args?.snapshot_id}` };
-    const payload = payloads.get(original.id);
-    if (!payload) return { error: "Payload not available in memory" };
-    if (!args?.patch || typeof args.patch !== "string") return { error: "patch string required" };
-    const newPayload = applyXmlPatch(payload, args.patch);
-    if (!newPayload) return { error: "Patch produced no changes" };
-    const hash = createHash("sha256").update(newPayload).digest("hex");
-    const summary = parseBuildSummary(newPayload, original.source);
-    const patched = {
-      id: randomUUID(),
-      source: original.source,
-      createdAt: new Date().toISOString(),
-      label: args?.label?.trim() || `${original.label} (patched)`,
-      hash,
-      sizeBytes: Buffer.byteLength(newPayload, "utf8"),
-      preview: newPayload.slice(0, 240),
-      summary,
-      parentId: original.id,
-      patchPath: args.patch.slice(0, 120),
-    };
-    snapshots.set(patched.id, patched);
-    payloads.set(patched.id, newPayload);
-    persistSnapshot(patched, newPayload);
-    return { snapshot_id: patched.id, label: patched.label, parent_id: patched.parentId, skills_count: patched.summary.skills.length, items_count: patched.summary.items.length };
-  }
-
   return null; // not a local tool
+}
+
+async function callBridge(action, body) {
+  try {
+    const res = await fetch(`${POB2_BRIDGE_URL}/api`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, ...(body || {}) }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return { error: `PoB2 bridge returned HTTP ${res.status}` };
+    return await res.json();
+  } catch (err) {
+    return { error: `PoB2 bridge not reachable: ${err?.message ?? err}` };
+  }
+}
+
+function isFullPob2BuildXml(xml) {
+  return typeof xml === "string" &&
+    /<\s*PathOfBuilding2(?:\s|>)/i.test(xml) &&
+    /<\s*Build(?:\s|\/|>)/i.test(xml);
+}
+
+function fullBuildXmlToolError() {
+  return {
+    error:
+      "build_xml must be a full PoB2 XML export containing <PathOfBuilding2> and <Build>. " +
+      "Partial <Skill>, <Item>, or passive fragments are rejected because the current bridge imports whole builds and does not patch fragments safely.",
+  };
 }
 
 async function executeTool(name, args) {
   if (LOCAL_TOOL_NAMES.has(name)) {
     return executeLocalTool(name, args);
   }
+
+  // PoB2 bridge tools — forward to PoB2's Lua HTTP listener
+  if (POBAI_BRIDGE_TOOL_NAMES.has(name)) {
+    if (name === "pob2_get_calcs") {
+      const data = await callBridge("get_calcs");
+      if (data.error) return data;
+      return { stats: data.stats };
+    }
+
+    if (name === "pob2_export_build") {
+      return await callBridge("export_build");
+    }
+
+    if (name === "pob2_test_gem_swap") {
+      if (!isFullPob2BuildXml(args?.build_xml)) return fullBuildXmlToolError();
+      const data = await callBridge("import_build", {
+        xml: args.build_xml,
+      });
+      if (data.error) return data;
+      return {
+        status: "tested",
+        note: `Tested gem swap in slot "${args?.slot_name || "unknown"}"`,
+        stats: data.stats,
+      };
+    }
+
+    if (name === "pob2_test_item_swap") {
+      if (!isFullPob2BuildXml(args?.build_xml)) return fullBuildXmlToolError();
+      const data = await callBridge("import_build", {
+        xml: args.build_xml,
+      });
+      if (data.error) return data;
+      return {
+        status: "tested",
+        note: `Tested item swap in slot "${args?.slot || "unknown"}"`,
+        stats: data.stats,
+      };
+    }
+
+    if (name === "pob2_test_passive_change") {
+      if (!isFullPob2BuildXml(args?.build_xml)) return fullBuildXmlToolError();
+      const data = await callBridge("import_build", {
+        xml: args.build_xml,
+      });
+      if (data.error) return data;
+      return {
+        status: "tested",
+        note: args?.note || "Tested passive tree change",
+        stats: data.stats,
+      };
+    }
+  }
+
   if (poe2Mcp.ready) {
     try {
       return await poe2Mcp.callTool(name, args);
@@ -810,6 +888,16 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/status") {
+    let pob2Connected = false;
+    try {
+      const res = await fetch(`${POB2_BRIDGE_URL}/api`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ping" }),
+        signal: AbortSignal.timeout(2000),
+      });
+      pob2Connected = res.ok;
+    } catch {}
     sendJson(response, 200, {
       ok: true,
       buildsLoaded: snapshots.size,
@@ -818,8 +906,9 @@ async function handleApi(request, response, url) {
         toolCount: poe2Mcp.tools.length,
         tools: poe2Mcp.toolNames,
       },
-      localTools: [...LOCAL_TOOL_NAMES],
-      allTools: [...LOCAL_TOOL_NAMES, ...poe2Mcp.toolNames],
+      pob2Bridge: { connected: pob2Connected, url: POB2_BRIDGE_URL },
+      localTools: [...LOCAL_TOOL_NAMES, ...POBAI_BRIDGE_TOOL_NAMES],
+      allTools: [...LOCAL_TOOL_NAMES, ...POBAI_BRIDGE_TOOL_NAMES, ...poe2Mcp.toolNames],
     });
     return;
   }
@@ -838,6 +927,32 @@ async function handleApi(request, response, url) {
       character: s.summary?.character,
     }));
     sendJson(response, 200, builds);
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/build/compare") {
+    const body = await readJson(request);
+    const error = validateComparePayload(body);
+    if (error) {
+      sendJson(response, 400, { error });
+      return;
+    }
+
+    const baseId = body.baseId.trim();
+    const targetId = body.targetId.trim();
+    const baseSnapshot = snapshots.get(baseId);
+    const targetSnapshot = snapshots.get(targetId);
+    const missingIds = [
+      ...(baseSnapshot ? [] : [baseId]),
+      ...(targetSnapshot ? [] : [targetId]),
+    ];
+
+    if (missingIds.length > 0) {
+      sendJson(response, 404, { error: "Snapshot not found", missingIds });
+      return;
+    }
+
+    sendJson(response, 200, compareSnapshots(baseSnapshot, targetSnapshot));
     return;
   }
 
@@ -900,88 +1015,6 @@ async function handleApi(request, response, url) {
     return;
   }
 
-  const cloneMatch = url.pathname.match(/^\/api\/build\/([^/]+)\/clone$/);
-  if (request.method === "POST" && cloneMatch) {
-    const snap = snapshots.get(cloneMatch[1]);
-    if (!snap) { sendJson(response, 404, { error: "Snapshot not found" }); return; }
-    const payload = await getPayload(snap.id);
-    if (!payload) { sendJson(response, 500, { error: "Payload not found on disk" }); return; }
-    const body = await readJson(request);
-    const clone = {
-      ...snap,
-      id: randomUUID(),
-      createdAt: new Date().toISOString(),
-      label: body.label?.trim() || `${snap.label} (clone)`,
-      parentId: snap.id,
-    };
-    delete clone.parentId; delete clone.patchPath; // clean inherited optional fields
-    clone.parentId = snap.id;
-    snapshots.set(clone.id, clone);
-    payloads.set(clone.id, payload);
-    await persistSnapshot(clone, payload);
-    sendJson(response, 201, { snapshot: clone });
-    return;
-  }
-
-  const diffMatch = url.pathname === "/api/build/diff" && request.method === "POST";
-  if (diffMatch) {
-    const body = await readJson(request);
-    const id1 = body.base_snapshot_id;
-    const id2 = body.target_snapshot_id;
-    if (!id1 || !id2) { sendJson(response, 400, { error: "base_snapshot_id and target_snapshot_id required" }); return; }
-    const s1 = snapshots.get(id1);
-    const s2 = snapshots.get(id2);
-    if (!s1 || !s2) { sendJson(response, 404, { error: "One or both snapshots not found" }); return; }
-    const [p1, p2] = await Promise.all([getPayload(id1), getPayload(id2)]);
-    if (!p1 || !p2) { sendJson(response, 500, { error: "Could not read payloads" }); return; }
-    sendJson(response, 200, computeSnapshotDiff(p1, p2, id1, id2));
-    return;
-  }
-
-  const lineageMatch = url.pathname.match(/^\/api\/build\/([^/]+)\/lineage$/);
-  if (request.method === "GET" && lineageMatch) {
-    const entries = [];
-    let current = snapshots.get(lineageMatch[1]);
-    if (!current) { sendJson(response, 404, { error: "Snapshot not found" }); return; }
-    while (current) {
-      entries.push({ id: current.id, label: current.label, createdAt: current.createdAt, parentId: current.parentId });
-      current = current.parentId ? snapshots.get(current.parentId) : undefined;
-    }
-    sendJson(response, 200, entries);
-    return;
-  }
-
-  const patchMatch = url.pathname.match(/^\/api\/build\/([^/]+)\/patch$/);
-  if (request.method === "POST" && patchMatch) {
-    const snap = snapshots.get(patchMatch[1]);
-    if (!snap) { sendJson(response, 404, { error: "Snapshot not found" }); return; }
-    const body = await readJson(request);
-    if (!body.patch || typeof body.patch !== "string") { sendJson(response, 400, { error: "patch string required" }); return; }
-    const payload = await getPayload(snap.id);
-    if (!payload) { sendJson(response, 500, { error: "Payload not found on disk" }); return; }
-    const newPayload = applyXmlPatch(payload, body.patch);
-    if (!newPayload) { sendJson(response, 422, { error: "Patch produced no changes. Check patch format." }); return; }
-    const hash = createHash("sha256").update(newPayload).digest("hex");
-    const summary = parseBuildSummary(newPayload, snap.source);
-    const patched = {
-      id: randomUUID(),
-      source: snap.source,
-      createdAt: new Date().toISOString(),
-      label: body.label?.trim() || `${snap.label} (patched)`,
-      hash,
-      sizeBytes: Buffer.byteLength(newPayload, "utf8"),
-      preview: newPayload.slice(0, 240),
-      summary,
-      parentId: snap.id,
-      patchPath: body.patch.slice(0, 120),
-    };
-    snapshots.set(patched.id, patched);
-    payloads.set(patched.id, newPayload);
-    await persistSnapshot(patched, newPayload);
-    sendJson(response, 201, { snapshot: patched });
-    return;
-  }
-
   const deleteMatch = url.pathname.match(/^\/api\/build\/([^/]+)$/);
   if (request.method === "DELETE" && deleteMatch) {
     const snapshot = snapshots.get(deleteMatch[1]);
@@ -994,6 +1027,68 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  // --- PoB2 bridge proxy endpoints ---
+  if (request.method === "GET" && url.pathname === "/api/pob2/status") {
+    try {
+      const res = await fetch(`${POB2_BRIDGE_URL}/api`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ping" }),
+        signal: AbortSignal.timeout(3000),
+      });
+      const data = res.ok ? await res.json() : null;
+      sendJson(response, 200, { connected: res.ok, version: data?.version ?? null });
+    } catch {
+      sendJson(response, 200, { connected: false, version: null });
+    }
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/pob2/export") {
+    try {
+      const res = await fetch(`${POB2_BRIDGE_URL}/api`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "export_build" }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) {
+        sendJson(response, 502, { error: `Bridge returned HTTP ${res.status}` });
+        return;
+      }
+      const data = await res.json();
+      sendJson(response, 200, data);
+    } catch (err) {
+      sendJson(response, 502, { error: `PoB2 bridge not reachable: ${err?.message ?? err}` });
+    }
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/pob2/calculate") {
+    const body = await readJson(request);
+    if (!body.xml) {
+      sendJson(response, 400, { error: "xml field is required" });
+      return;
+    }
+    try {
+      const res = await fetch(`${POB2_BRIDGE_URL}/api`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "calculate", xml: body.xml }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) {
+        sendJson(response, 502, { error: `Bridge calculation returned HTTP ${res.status}` });
+        return;
+      }
+      const data = await res.json();
+      sendJson(response, 200, data);
+    } catch (err) {
+      sendJson(response, 502, { error: `PoB2 bridge not reachable: ${err?.message ?? err}` });
+    }
+    return;
+  }
+
   if (request.method === "POST" && url.pathname === "/api/build/import") {
     const body = await readJson(request);
     const error = validateImportPayload(body);
@@ -1002,7 +1097,8 @@ async function handleApi(request, response, url) {
       return;
     }
 
-    const rawPayload = body.payload.replace(/\r\n/g, "\n").trim();
+    const importPayload = typeof body.payload === "string" ? body.payload : body.code;
+    const rawPayload = importPayload.replace(/\r\n/g, "\n").trim();
     let resolved;
     try {
       resolved = await resolveToXml(rawPayload, { mcp: poe2Mcp });
@@ -1017,7 +1113,7 @@ async function handleApi(request, response, url) {
 
     const xml = resolved.xml;
     const hash = createHash("sha256").update(xml).digest("hex");
-    const summary = parseBuildSummary(xml, body.source);
+    const summary = parseBuild(xml).summary;
     if (resolved.note) summary.resolvedFrom = resolved.note;
     const snapshot = {
       id: randomUUID(),
@@ -1073,14 +1169,30 @@ async function handleApi(request, response, url) {
     }
 
     // Live mode — tool-use loop with the configured LLM
+    let pob2BridgeConnected = false;
+    try {
+      const res = await fetch(`${POB2_BRIDGE_URL}/api`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ping" }),
+        signal: AbortSignal.timeout(2000),
+      });
+      pob2BridgeConnected = res.ok;
+    } catch {}
+
     const poe2McpStatus = poe2Mcp.ready
       ? `poe2-mcp is CONNECTED with ${poe2Mcp.tools.length} live game tools: ${poe2Mcp.toolNames.slice(0, 8).join(", ")}...`
       : "poe2-mcp is NOT connected (pip install poe2-mcp needed). You only have the 6 local PoB parse tools.";
+
+    const pob2BridgeStatus = pob2BridgeConnected
+      ? "PoB2 bridge is CONNECTED — you can read live DPS/eHP from PoB2 and test modifications."
+      : "PoB2 bridge is NOT connected — you cannot read live PoB2 calc data. Use the imported snapshot tools instead.";
 
     const systemPrompt = [
       "You are PoBAI, a Path of Exile 2 build advisor with direct access to the player's imported build data and live game knowledge tools.",
       "",
       `Tool status: ${poe2McpStatus}`,
+      `PoB2 bridge: ${pob2BridgeStatus}`,
       "",
       "## Workflow for EVERY new conversation:",
       "1. Call get_build_summary(snapshot_id) first to load the player's build. The snapshot_id comes from the user context or list_builds.",
@@ -1098,8 +1210,14 @@ async function handleApi(request, response, url) {
       "1. First understand the current state completely (skills, supports, passives, gear).",
       "2. Identify the specific constraint (e.g. Trinity needs equal fire/cold/lightning added damage).",
       "3. If poe2-mcp connected: try alternatives — swap gems, recalculate, compare. Show before/after.",
-      "4. If poe2-mcp not connected: explain what changes to make and why, but flag that you can't recalculate without poe2-mcp.",
+       "4. If poe2-mcp not connected: explain what changes to make and why, but flag that you can't recalculate without poe2-mcp.",
       "5. Give concrete, actionable recommendations: exact gem names, passive nodes to allocate/deallocate, specific items to target.",
+      "",
+      "## When the PoB2 bridge is connected (live PoB2 calc access):",
+      "1. Call pob2_get_calcs to read current DPS/eHP before giving advice.",
+      "2. For 'what if' questions: pob2_export_build → modify XML → pob2_test_gem_swap / pob2_test_item_swap → compare results.",
+      "3. Cite exact deltas: 'Swapping to Fire Penetration changes CombinedDPS from 245,000 to 312,000 (+27%).'",
+      "4. After testing a modification, the build state in PoB2 has changed. Test one change at a time.",
       "",
       "## Rules:",
       "- NEVER invent DPS numbers, resistance percentages, or mechanic interactions — always use tool data.",
@@ -1203,93 +1321,13 @@ const server = createServer(async (request, response) => {
   }
 });
 
-const localTools = [
-  {
-    name: "get_build_summary",
-    description: "Get a full summary of an imported build",
-    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" } }, required: ["snapshot_id"] },
-  },
-  {
-    name: "get_skills",
-    description: "Get all skill groups and their gems",
-    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" } }, required: ["snapshot_id"] },
-  },
-  {
-    name: "get_items",
-    description: "Get equipped items, optionally filtered by slot",
-    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" }, slot: { type: "string" } }, required: ["snapshot_id"] },
-  },
-  {
-    name: "get_passive_tree",
-    description: "Get passive tree info",
-    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" } }, required: ["snapshot_id"] },
-  },
-  {
-    name: "get_defenses",
-    description: "Get defense statistics",
-    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" } }, required: ["snapshot_id"] },
-  },
-  {
-    name: "list_builds",
-    description: "List all imported builds",
-    inputSchema: { type: "object", properties: {} },
-  },
-  {
-    name: "clone_build",
-    description: "Clone an existing build snapshot",
-    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" }, label: { type: "string" } }, required: ["snapshot_id"] },
-  },
-  {
-    name: "diff_builds",
-    description: "Compare two build snapshots",
-    inputSchema: { type: "object", properties: { base_snapshot_id: { type: "string" }, target_snapshot_id: { type: "string" } }, required: ["base_snapshot_id", "target_snapshot_id"] },
-  },
-  {
-    name: "get_lineage",
-    description: "Get clone/patch ancestry chain",
-    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" } }, required: ["snapshot_id"] },
-  },
-  {
-    name: "apply_build_patch",
-    description: "Apply XML patch to build snapshot",
-    inputSchema: { type: "object", properties: { snapshot_id: { type: "string" }, patch: { type: "string" }, label: { type: "string" } }, required: ["snapshot_id", "patch"] },
-  },
-];
-
-const poe2McpToolRefs = [];
-
-const wsHandler = createWsHandler({
-  openRouterApiKey: process.env.OPENROUTER_API_KEY || null,
-  poe2McpTools: poe2McpToolRefs,
-  localTools,
-});
-
-server.on("upgrade", (request, socket, head) => {
-  if (request.url === "/ws") {
-    wsHandler(request, socket, head);
-  } else {
-    socket.destroy();
-  }
-});
-
 await loadSnapshotsFromDisk();
 
 server.listen(port, host, async () => {
   console.log(`pobai-server listening on http://${host}:${port}`);
   try {
     await poe2Mcp.connect();
-    const toolNames = poe2Mcp.toolNames;
-    for (const name of toolNames) {
-      poe2McpToolRefs.push({
-        type: "function",
-        function: {
-          name,
-          description: `poe2-mcp: ${name}`,
-          parameters: { type: "object", properties: {} },
-        },
-      });
-    }
-    console.log(`poe2-mcp connected: ${toolNames.length} tools`);
+    console.log(`poe2-mcp connected: ${poe2Mcp.toolNames.length} tools`);
   } catch (e) {
     console.log("poe2-mcp not available, continuing without bridge tools");
   }
