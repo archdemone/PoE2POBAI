@@ -1,12 +1,5 @@
 import React from "react";
-
-interface BuildInfo {
-  snapshot_id: string;
-  label: string;
-  source: string;
-  created_at: string;
-  character?: { className?: string; ascendancy?: string; level?: string };
-}
+import type { BuildInfo } from "../types";
 
 interface BuildSidebarProps {
   builds: BuildInfo[];

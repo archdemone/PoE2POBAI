@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render } from "@testing-library/react";
-import { DiffView } from "../components/DiffView";
+import { DiffView, type BuildCompareResult } from "../components/DiffView";
 
 const baseDiff = {
   baseId: "abc",
@@ -25,7 +25,7 @@ describe("DiffView", () => {
       skillsRemoved: [{ label: "Twister", gems: ["Twister"] }],
     };
     render(<DiffView diff={diff} />);
-    expect(document.body.textContent).toContain("Skills Removed");
+    expect(document.body.textContent).toContain("Skills only in my build");
     expect(document.body.textContent).toContain("Twister");
   });
 
@@ -35,7 +35,7 @@ describe("DiffView", () => {
       skillsAdded: [{ label: "Fireball", gems: ["Fireball", "Controlled Destruction"] }],
     };
     render(<DiffView diff={diff} />);
-    expect(document.body.textContent).toContain("Skills Added");
+    expect(document.body.textContent).toContain("Skills to add from target");
     expect(document.body.textContent).toContain("Fireball");
     expect(document.body.textContent).toContain("Controlled Destruction");
   });
@@ -47,8 +47,8 @@ describe("DiffView", () => {
       itemsAdded: [{ slot: "Weapon 1", name: "New Staff" }],
     };
     render(<DiffView diff={diff} />);
-    expect(document.body.textContent).toContain("Items Removed");
-    expect(document.body.textContent).toContain("Items Added");
+    expect(document.body.textContent).toContain("Items only in my build");
+    expect(document.body.textContent).toContain("Items to equip from target");
     expect(document.body.textContent).toContain("Old Staff");
     expect(document.body.textContent).toContain("New Staff");
   });
@@ -59,20 +59,59 @@ describe("DiffView", () => {
       defensesChanged: { Life: { from: "4000", to: "4500" }, ES: { from: "200", to: "0" } },
     };
     render(<DiffView diff={diff} />);
-    expect(document.body.textContent).toContain("Defenses Changed");
+    expect(document.body.textContent).toContain("Stat differences");
     expect(document.body.textContent).toContain("Life");
     expect(document.body.textContent).toContain("4000");
     expect(document.body.textContent).toContain("4500");
   });
 
   it("shows passive tree changes", () => {
-    const diff = {
+    const diff: BuildCompareResult = {
       ...baseDiff,
       passivesChanged: { nodesAdded: 3, nodesRemoved: 1 },
     };
     render(<DiffView diff={diff} />);
-    expect(document.body.textContent).toContain("Passive Tree Changed");
+    expect(document.body.textContent).toContain("Passive tree to copy");
     expect(document.body.textContent).toContain("+3");
     expect(document.body.textContent).toContain("-1");
+  });
+
+  it("renders the backend compare response shape", () => {
+    const diff: BuildCompareResult = {
+      base: { id: "base", label: "Mine" },
+      target: { id: "target", label: "Guide" },
+      statDiffs: [
+        { label: "Life", baseValue: 3200, targetValue: 4100, delta: 900, percentDelta: 28.125, changed: true, status: "changed", color: "green" },
+        { label: "FireResist", baseRaw: "75", targetRaw: "63", delta: -12, changed: true, status: "changed", color: "red" },
+        { label: "Armour", baseValue: 1000, targetValue: 1000, delta: 0, changed: false, status: "unchanged", color: "neutral" },
+      ],
+      skills: {
+        rows: [
+          { key: "twister", status: "changed", changed: true, base: { label: "Twister", gems: [{ name: "Twister" }] }, target: { label: "Twister", gems: [{ name: "Twister" }, { name: "Trinity Support" }] } },
+          { key: "blink", status: "added", changed: true, base: null, target: { label: "Blink", gems: [{ name: "Blink" }] } },
+        ],
+      },
+      items: {
+        rows: [
+          { key: "weapon1", status: "removed", changed: true, base: { slot: "Weapon 1", name: "Old Bow" }, target: null },
+        ],
+      },
+      passiveTree: {
+        addedNodeIds: ["10", "11"],
+        removedNodeIds: ["9"],
+      },
+    };
+
+    render(<DiffView diff={diff} />);
+    expect(document.body.textContent).toContain("Life");
+    expect(document.body.textContent).toContain("+900");
+    expect(document.body.textContent).toContain("+28.13%");
+    expect(document.body.textContent).toContain("FireResist");
+    expect(document.body.textContent).toContain("-12");
+    expect(document.body.textContent).not.toContain("Armour");
+    expect(document.body.textContent).toContain("Blink");
+    expect(document.body.textContent).toContain("Old Bow");
+    expect(document.body.textContent).toContain("+2 nodes");
+    expect(document.body.textContent).toContain("-1 nodes");
   });
 });
