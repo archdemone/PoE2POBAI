@@ -11,6 +11,7 @@
     "build": "npm run build --workspaces --if-present",
     "bridge:install": "node integrations/pob2-addon/install-bridge.mjs",
     "bridge:dry-run": "node integrations/pob2-addon/install-bridge.mjs --dry-run",
+    "tree:build": "node scripts/build-tree-index.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"
   },
