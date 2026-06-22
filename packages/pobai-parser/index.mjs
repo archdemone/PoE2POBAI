@@ -1,13 +1,34 @@
-import { inflateSync, inflateRawSync } from "node:zlib";
+import { inflateSync, inflateRawSync, constants as zlibConstants } from "node:zlib";
 
+// Decode a Path of Building export code (URL-safe base64 of a zlib stream).
+// Real-world codes copied through browsers/terminals sometimes lose or alter
+// their trailing bytes, which makes a strict inflate throw "incorrect data
+// check" even though the build XML decompressed fine. So we try strict first,
+// then fall back to tolerant decoders (Z_SYNC_FLUSH ignores the trailing
+// Adler-32 check) and raw deflate, returning the first result that looks like a
+// PoB build.
 export function decodePobCode(code) {
   const normalized = code.trim().replace(/-/g, "+").replace(/_/g, "/");
   const buf = Buffer.from(normalized, "base64");
-  try {
-    return inflateSync(buf).toString("utf8");
-  } catch {
-    return inflateRawSync(buf).toString("utf8");
+  const attempts = [
+    () => inflateSync(buf),
+    () => inflateSync(buf, { finishFlush: zlibConstants.Z_SYNC_FLUSH }),
+    () => inflateRawSync(buf),
+    () => inflateRawSync(buf, { finishFlush: zlibConstants.Z_SYNC_FLUSH }),
+  ];
+  let lastError;
+  let firstResult;
+  for (const attempt of attempts) {
+    try {
+      const text = attempt().toString("utf8");
+      if (firstResult === undefined) firstResult = text;
+      if (/PathOfBuilding/i.test(text)) return text;
+    } catch (err) {
+      lastError = err;
+    }
   }
+  if (firstResult !== undefined) return firstResult;
+  throw lastError ?? new Error("Could not decode PoB export code.");
 }
 
 export function isPobCode(input) {
@@ -130,6 +151,26 @@ function parseItemBody(lines) {
   return result;
 }
 
+// Collect skill groups as { attributes, body }. Real PoB2 exports omit the
+// </Skill> close tag and use self-closing <Gem .../> children, so we can't rely
+// on matched <Skill>...</Skill> blocks. Instead, treat the text between each
+// <Skill ...> opening tag and the next <Skill>/</SkillSet>/</Skills> boundary as
+// that skill's body. Falls back gracefully on the older closed-tag format too.
+function collectSkillGroups(xml) {
+  const skillsSection = xml.match(/<Skills\b[\s\S]*?<\/Skills>/i)?.[0] ?? xml;
+  const opens = [...skillsSection.matchAll(/<Skill\b([^>]*?)\/?>/gi)];
+  return opens.map((match, index) => {
+    const start = match.index + match[0].length;
+    const candidates = [
+      skillsSection.indexOf("<Skill", start),
+      skillsSection.indexOf("</SkillSet", start),
+      skillsSection.indexOf("</Skills", start),
+    ].filter((idx) => idx !== -1);
+    const end = candidates.length ? Math.min(...candidates) : skillsSection.length;
+    return { attributes: parseAttributes(match[1]), body: skillsSection.slice(start, end) };
+  });
+}
+
 export function parseBuildXml(xml) {
   const warnings = [];
   const summary = {
@@ -190,7 +231,7 @@ export function parseBuildXml(xml) {
     })
     .filter((item) => item.name || item.typeLine || item.slot);
 
-  summary.skills = collectBlocks(xml, "Skill")
+  summary.skills = collectSkillGroups(xml)
     .slice(0, 40)
     .map((skill, i) => {
       const gems = collectTagAttrs(skill.body, "Gem")

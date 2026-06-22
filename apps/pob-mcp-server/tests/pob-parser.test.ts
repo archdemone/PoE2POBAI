@@ -76,6 +76,32 @@ describe("parseBuildXml — character", () => {
   });
 });
 
+describe("real PoB2 export quirks", () => {
+  it("parses skills with self-closing gems and no </Skill> close tags", () => {
+    // Real PoB2 exports omit </Skill> and use self-closing <Gem .../> children.
+    const xml = `<PathOfBuilding2><Build className="Monk" level="90"/>
+      <Skills><SkillSet id="1">
+        <Skill enabled="true" mainActiveSkill="1">
+          <Gem nameSpec="Ice Strike" level="20" quality="20"/>
+          <Gem nameSpec="Martial Tempo" level="18"/>
+        <Skill enabled="true">
+          <Gem nameSpec="Bell" level="19"/>
+      </SkillSet></Skills></PathOfBuilding2>`;
+    const skills = parseBuildXml(xml).skills;
+    expect(skills).toHaveLength(2);
+    expect(skills[0].gems.map((g) => g.name)).toEqual(["Ice Strike", "Martial Tempo"]);
+    expect(skills[1].gems.map((g) => g.name)).toEqual(["Bell"]);
+  });
+
+  it("decodes a PoB code whose trailing checksum was lost in copy-paste", () => {
+    const xml = `<PathOfBuilding2><Build className="Monk" level="90"/></PathOfBuilding2>`;
+    const full = deflateSync(Buffer.from(xml, "utf8"));
+    const truncated = full.subarray(0, full.length - 4); // drop the Adler-32 check
+    const code = truncated.toString("base64").replace(/\+/g, "-").replace(/\//g, "_");
+    expect(decodePobCode(code)).toContain("PathOfBuilding");
+  });
+});
+
 describe("parseBuildXml — item affixes", () => {
   // Real PoB exports store items as raw clipboard text anchored on a "Rarity:" line.
   const RARE_ITEM_XML = `<PathOfBuilding2>
