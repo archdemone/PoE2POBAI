@@ -65,6 +65,71 @@ const DEFENSE_KEYS = [
   "evasion", "block", "fire", "cold", "lightning", "chaos", "resistance", "resist",
 ];
 
+// Lines that describe item metadata rather than affixes. We strip these so the
+// `mods` array carries only the affixes a player needs to match for a 1:1 swap.
+const ITEM_META_PREFIXES = [
+  "rarity:", "unique id:", "item level:", "itemlevel:", "quality:", "sockets:",
+  "levelreq:", "level requirement", "requires", "armour:", "evasion:",
+  "energy shield:", "ward:", "block:", "implicits:", "league:", "source:",
+  "radius:", "limited to:", "variant:", "selected variant:", "has variants",
+  "prefix:", "suffix:", "crafted:", "rune:", "id:", "talisman tier:",
+  "catalyst", "stack size:",
+];
+
+function isItemMetaLine(line) {
+  const lower = line.toLowerCase();
+  return ITEM_META_PREFIXES.some((prefix) => lower.startsWith(prefix));
+}
+
+// Strip PoB affix annotation tags like {crafted}, {tags:...}, {range:0.5} that
+// wrap a mod line, leaving the human-readable affix text.
+function cleanModLine(line) {
+  return line.replace(/\{[^}]*\}/g, "").trim();
+}
+
+// Parse the raw clipboard-style text PoB stores inside an <Item> element into a
+// name / type / properties / affix list. Best-effort and defensive: PoB exports
+// vary, so unknown lines fall through into `mods`.
+function parseItemBody(lines) {
+  const result = { rarity: undefined, name: undefined, typeLine: undefined, itemLevel: undefined, quality: undefined, sockets: undefined, mods: [] };
+  if (!lines.length) return result;
+
+  let index = 0;
+  const rarityMatch = lines[0].match(/^Rarity:\s*(.+)$/i);
+  if (rarityMatch) {
+    result.rarity = rarityMatch[1].trim();
+    index = 1;
+    // For named items the next non-meta line is the name, then the base type.
+    if (lines[index] && !isItemMetaLine(lines[index])) {
+      result.name = lines[index];
+      index += 1;
+    }
+    if (lines[index] && !isItemMetaLine(lines[index]) && !/^[+-]/.test(lines[index])) {
+      result.typeLine = lines[index];
+      index += 1;
+    }
+  }
+
+  for (let i = index; i < lines.length; i += 1) {
+    const line = lines[i];
+    const ilvl = line.match(/^Item\s*Level:\s*(\d+)/i);
+    if (ilvl) { result.itemLevel = ilvl[1]; continue; }
+    const quality = line.match(/^Quality:\s*\+?(\d+)/i);
+    if (quality) { result.quality = quality[1]; continue; }
+    const sockets = line.match(/^Sockets:\s*(.+)$/i);
+    if (sockets) { result.sockets = sockets[1].trim(); continue; }
+    if (isItemMetaLine(line)) continue;
+    // Only collect affixes once we've anchored on a "Rarity:" header line. Without
+    // it (e.g. items stored as <Name>/<TypeLine> subtags) arbitrary lines aren't
+    // affixes, so we leave `mods` empty rather than polluting it with the name.
+    if (!result.rarity) continue;
+    const mod = cleanModLine(line);
+    if (mod) result.mods.push(mod);
+  }
+
+  return result;
+}
+
 export function parseBuildXml(xml) {
   const warnings = [];
   const summary = {
@@ -110,12 +175,17 @@ export function parseBuildXml(xml) {
         .split("\n")
         .map((l) => l.trim())
         .filter(Boolean);
+      const parsed = parseItemBody(lines);
       return {
         id: compact(item.attributes["id"] || item.attributes["itemId"] || String(i + 1)),
         slot: compact(item.attributes["slot"] || item.attributes["inventoryId"] || item.attributes["location"]),
-        name: compact(textFromTag(item.body, "Name") || item.attributes["name"] || lines[0]),
-        typeLine: compact(textFromTag(item.body, "TypeLine") || item.attributes["typeLine"] || lines[1]),
-        rarity: compact(item.attributes["rarity"]),
+        name: compact(textFromTag(item.body, "Name") || item.attributes["name"] || parsed.name),
+        typeLine: compact(textFromTag(item.body, "TypeLine") || item.attributes["typeLine"] || parsed.typeLine),
+        rarity: compact(item.attributes["rarity"] || parsed.rarity),
+        itemLevel: compact(item.attributes["ilvl"] || item.attributes["itemLevel"] || parsed.itemLevel),
+        quality: compact(item.attributes["quality"] || parsed.quality),
+        sockets: compact(item.attributes["sockets"] || parsed.sockets),
+        mods: parsed.mods,
       };
     })
     .filter((item) => item.name || item.typeLine || item.slot);

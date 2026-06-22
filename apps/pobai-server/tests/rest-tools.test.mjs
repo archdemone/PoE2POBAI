@@ -71,6 +71,7 @@ beforeAll(async () => {
     <PlayerStat stat="FireResist" value="75" />
     <PlayerStat stat="ColdResist" value="75" />
     <PlayerStat stat="LightningResist" value="75" />
+    <PlayerStat stat="Block" value="250" />
     <Skill slot="1" label="Lightning Arrow" enabled="true" mainActiveSkill="LightningArrow">
       <Gem nameSpec="Lightning Arrow" level="20" quality="20" enabled="true" />
       <Gem nameSpec="Greater Multiple Projectiles" level="20" quality="20" enabled="true" support="true" />
@@ -108,6 +109,7 @@ beforeAll(async () => {
     <PlayerStat stat="ColdResist" value="70" />
     <PlayerStat stat="LightningResist" value="75" />
     <PlayerStat stat="ChaosResist" value="20" />
+    <PlayerStat stat="Block" value="252" />
     <Skill slot="1" label="Lightning Arrow" enabled="true" mainActiveSkill="LightningArrow">
       <Gem nameSpec="Lightning Arrow" level="21" quality="20" enabled="true" />
       <Gem nameSpec="Greater Multiple Projectiles" level="20" quality="20" enabled="true" support="true" />
@@ -228,6 +230,39 @@ describe("REST tool endpoints", () => {
       status: "changed",
     });
     expect(life.percentDelta).toBeCloseTo(9.375, 3);
+  });
+
+  it("marks near-equal stats as neutral/white instead of green or red", async () => {
+    const { data } = await postJson("/api/build/compare", { baseId: buildId, targetId: targetBuildId });
+    const block = data.statDiffs.find((stat) => stat.label === "Block");
+    expect(block).toMatchObject({
+      delta: 2,
+      near: true,
+      status: "near",
+      impact: "neutral",
+      color: "neutral",
+    });
+  });
+
+  it("attaches per-gem diffs to changed skill groups", async () => {
+    const { data } = await postJson("/api/build/compare", { baseId: buildId, targetId: targetBuildId });
+    const arrowRow = data.skills.rows.find((row) => row.status === "changed" && row.gemDiff);
+    expect(arrowRow).toBeTruthy();
+    const names = (gems) => gems.map((g) => g.name);
+    expect(names(arrowRow.gemDiff.added)).toContain("Fork");
+    expect(names(arrowRow.gemDiff.removed)).toContain("Chain");
+    const releveled = arrowRow.gemDiff.changed.find((c) => c.name === "Lightning Arrow");
+    expect(releveled).toBeTruthy();
+    expect(releveled.level).toMatchObject({ baseValue: 20, targetValue: 21, color: "green" });
+  });
+
+  it("attaches per-property diffs to changed item slots", async () => {
+    const { data } = await postJson("/api/build/compare", { baseId: buildId, targetId: targetBuildId });
+    const weapon = data.items.rows.find((row) => row.key === "weapon1");
+    expect(weapon.status).toBe("changed");
+    expect(weapon.itemDiff).toBeTruthy();
+    const nameChange = weapon.itemDiff.properties.find((p) => p.label === "Name");
+    expect(nameChange).toMatchObject({ baseValue: "Windripper", targetValue: "Storm Song" });
   });
 
   it("POST /api/build/import accepts legacy code while keeping payload canonical", async () => {

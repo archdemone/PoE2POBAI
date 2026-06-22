@@ -40,6 +40,10 @@ export interface ParsedItem {
   name?: string;
   typeLine?: string;
   rarity?: string;
+  itemLevel?: string;
+  quality?: string;
+  sockets?: string;
+  mods?: string[];
 }
 
 export interface ParsedPassiveTree {

@@ -156,6 +156,11 @@ function parseNumericValue(value) {
   return Number(normalized.replace(/%$/, ""));
 }
 
+// A stat within this relative (or absolute) band of the other build is treated
+// as "close enough" and rendered neutral/white instead of green/red.
+const DEFAULT_TOLERANCE_PCT = 2;
+const DEFAULT_ABS_FLOOR = 1;
+
 function compareValue(key, baseRaw, targetRaw, options = {}) {
   const basePresent = baseRaw !== undefined && baseRaw !== null && baseRaw !== "";
   const targetPresent = targetRaw !== undefined && targetRaw !== null && targetRaw !== "";
@@ -204,9 +209,18 @@ function compareValue(key, baseRaw, targetRaw, options = {}) {
     const delta = targetNumeric - baseNumeric;
     const percentDelta = baseNumeric === 0 ? null : (delta / Math.abs(baseNumeric)) * 100;
     const direction = delta > 0 ? "increase" : delta < 0 ? "decrease" : "unchanged";
-    let impact = delta === 0 ? "neutral" : "changed";
-    if (options.higherIsBetter === true) impact = delta > 0 ? "better" : delta < 0 ? "worse" : "neutral";
-    if (options.higherIsBetter === false) impact = delta < 0 ? "better" : delta > 0 ? "worse" : "neutral";
+
+    // "Close enough" band: tiny differences read as neutral (white) rather than
+    // green/red, so a near-identical stat doesn't look like a meaningful swap.
+    const tolerancePct = options.tolerancePct ?? DEFAULT_TOLERANCE_PCT;
+    const absFloor = options.absFloor ?? DEFAULT_ABS_FLOOR;
+    const withinPct = percentDelta !== null && Math.abs(percentDelta) <= tolerancePct;
+    const withinAbs = Math.abs(delta) <= absFloor;
+    const near = delta !== 0 && (withinPct || withinAbs);
+
+    let impact = delta === 0 || near ? "neutral" : "changed";
+    if (!near && options.higherIsBetter === true) impact = delta > 0 ? "better" : delta < 0 ? "worse" : "neutral";
+    if (!near && options.higherIsBetter === false) impact = delta < 0 ? "better" : delta > 0 ? "worse" : "neutral";
     const color = impact === "better" ? "green" : impact === "worse" ? "red" : "neutral";
 
     return {
@@ -222,7 +236,8 @@ function compareValue(key, baseRaw, targetRaw, options = {}) {
       percentDelta,
       direction,
       changed: delta !== 0,
-      status: delta === 0 ? "unchanged" : "changed",
+      near,
+      status: delta === 0 ? "unchanged" : near ? "near" : "changed",
       higherIsBetter: options.higherIsBetter ?? null,
       impact,
       color,
@@ -315,6 +330,96 @@ function simplifyItem(item = {}) {
     name: item.name,
     typeLine: item.typeLine,
     rarity: item.rarity,
+    itemLevel: item.itemLevel,
+    quality: item.quality,
+    sockets: item.sockets,
+    mods: Array.isArray(item.mods) ? item.mods : [],
+  };
+}
+
+function gemKey(gem = {}) {
+  return normalizeCompareKey(gem.name || "");
+}
+
+// Per-gem comparison inside a skill group: which gems to add, drop, or relevel
+// to match the build being copied.
+function diffGems(baseGems = [], targetGems = []) {
+  const baseByKey = new Map(baseGems.map((gem) => [gemKey(gem), gem]));
+  const targetByKey = new Map(targetGems.map((gem) => [gemKey(gem), gem]));
+  const added = [];
+  const removed = [];
+  const changed = [];
+
+  for (const [key, gem] of targetByKey) {
+    if (!baseByKey.has(key)) added.push(gem);
+  }
+  for (const [key, gem] of baseByKey) {
+    if (!targetByKey.has(key)) removed.push(gem);
+  }
+  for (const [key, target] of targetByKey) {
+    const base = baseByKey.get(key);
+    if (!base) continue;
+    // Discrete gem stats: a single level/quality point matters, so compare exactly.
+    const level = compareValue("level", base.level, target.level, { label: "Level", higherIsBetter: true, tolerancePct: 0, absFloor: 0 });
+    const quality = compareValue("quality", base.quality, target.quality, { label: "Quality", higherIsBetter: true, tolerancePct: 0, absFloor: 0 });
+    if (level.changed || quality.changed) {
+      changed.push({ name: target.name, base, target, level, quality });
+    }
+  }
+
+  return {
+    added,
+    removed,
+    changed,
+    changedCount: added.length + removed.length + changed.length,
+  };
+}
+
+// Collapse a mod line to a template by removing numeric rolls, so a re-rolled
+// affix ("+45 to Life" vs "+52 to Life") reads as a roll change, not two mods.
+function modTemplate(line) {
+  return String(line || "").replace(/[+-]?\d+(?:\.\d+)?/g, "#").toLowerCase().trim();
+}
+
+// Per-item comparison for "changed" gear: property changes plus added / removed
+// / re-rolled affixes, so the user can match a guide item piece by piece.
+function diffItem(base = {}, target = {}) {
+  const properties = [];
+  const pushProp = (key, label, b, t, opts = {}) => {
+    // Item properties are discrete (name, quality, ilvl, sockets) — compare exactly.
+    const row = compareValue(key, b, t, { label, tolerancePct: 0, absFloor: 0, ...opts });
+    if (row.changed) properties.push(row);
+  };
+  pushProp("name", "Name", base.name, target.name);
+  pushProp("typeLine", "Base type", base.typeLine, target.typeLine);
+  pushProp("quality", "Quality", base.quality, target.quality, { higherIsBetter: true });
+  pushProp("itemLevel", "Item level", base.itemLevel, target.itemLevel, { higherIsBetter: true });
+  pushProp("sockets", "Sockets", base.sockets, target.sockets);
+
+  const baseMods = Array.isArray(base.mods) ? base.mods : [];
+  const targetMods = Array.isArray(target.mods) ? target.mods : [];
+  const baseByTemplate = new Map();
+  const targetByTemplate = new Map();
+  for (const mod of baseMods) if (!baseByTemplate.has(modTemplate(mod))) baseByTemplate.set(modTemplate(mod), mod);
+  for (const mod of targetMods) if (!targetByTemplate.has(modTemplate(mod))) targetByTemplate.set(modTemplate(mod), mod);
+
+  const modsAdded = [];
+  const modsRemoved = [];
+  const modsChanged = [];
+  for (const [template, mod] of targetByTemplate) {
+    if (!baseByTemplate.has(template)) modsAdded.push(mod);
+    else if (baseByTemplate.get(template) !== mod) modsChanged.push({ from: baseByTemplate.get(template), to: mod });
+  }
+  for (const [template, mod] of baseByTemplate) {
+    if (!targetByTemplate.has(template)) modsRemoved.push(mod);
+  }
+
+  return {
+    properties,
+    modsAdded,
+    modsRemoved,
+    modsChanged,
+    changedCount: properties.length + modsAdded.length + modsRemoved.length + modsChanged.length,
   };
 }
 
@@ -396,6 +501,25 @@ function comparePassiveTree(baseTree = {}, targetTree = {}) {
   };
 }
 
+// Attach per-gem detail to each changed skill row so the UI can show exactly
+// which gems differ rather than the whole group as one blob.
+function enrichSkillRows(comparison) {
+  for (const row of comparison.rows) {
+    if (row.status !== "changed") continue;
+    row.gemDiff = diffGems(row.base?.gems, row.target?.gems);
+  }
+  return comparison;
+}
+
+// Attach per-mod / property detail to each changed item row.
+function enrichItemRows(comparison) {
+  for (const row of comparison.rows) {
+    if (row.status !== "changed") continue;
+    row.itemDiff = diffItem(row.base, row.target);
+  }
+  return comparison;
+}
+
 function compareSnapshots(baseSnapshot, targetSnapshot) {
   const character = compareCharacter(baseSnapshot.summary?.character, targetSnapshot.summary?.character);
   const defenses = compareRecord(baseSnapshot.summary?.defenses, targetSnapshot.summary?.defenses, {
@@ -403,13 +527,15 @@ function compareSnapshots(baseSnapshot, targetSnapshot) {
     higherIsBetter: true,
   });
   const passiveTree = comparePassiveTree(baseSnapshot.summary?.passiveTree, targetSnapshot.summary?.passiveTree);
+  const skills = enrichSkillRows(compareCollection(baseSnapshot.summary?.skills, targetSnapshot.summary?.skills, skillCompareKey, simplifySkill));
+  const items = enrichItemRows(compareCollection(baseSnapshot.summary?.items, targetSnapshot.summary?.items, itemCompareKey, simplifyItem));
 
   return {
     base: snapshotMetadata(baseSnapshot),
     target: snapshotMetadata(targetSnapshot),
     character,
-    skills: compareCollection(baseSnapshot.summary?.skills, targetSnapshot.summary?.skills, skillCompareKey, simplifySkill),
-    items: compareCollection(baseSnapshot.summary?.items, targetSnapshot.summary?.items, itemCompareKey, simplifyItem),
+    skills,
+    items,
     passiveTree,
     defenses: { stats: defenses.rows, counts: defenses.counts, changed: defenses.changed },
     statDiffs: defenses.rows,

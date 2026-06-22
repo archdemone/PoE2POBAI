@@ -76,6 +76,43 @@ describe("parseBuildXml — character", () => {
   });
 });
 
+describe("parseBuildXml — item affixes", () => {
+  // Real PoB exports store items as raw clipboard text anchored on a "Rarity:" line.
+  const RARE_ITEM_XML = `<PathOfBuilding2>
+    <Build characterName="Modder" className="Witch" level="80" />
+    <Item id="1" slot="Body Armour">Rarity: RARE
+Doom Shell
+Expert Vaal Cuirass
+Item Level: 82
+Quality: +20
+Sockets: R-R-G
++45 to maximum Life
++38% to Fire Resistance
+{crafted}+12% to Cold Resistance</Item>
+  </PathOfBuilding2>`;
+
+  it("extracts item level, quality, and sockets", () => {
+    const item = parseBuildXml(RARE_ITEM_XML).items[0];
+    expect(item.itemLevel).toBe("82");
+    expect(item.quality).toBe("20");
+    expect(item.sockets).toBe("R-R-G");
+  });
+
+  it("extracts affix mods and strips crafting tags", () => {
+    const item = parseBuildXml(RARE_ITEM_XML).items[0];
+    expect(item.mods).toContain("+45 to maximum Life");
+    expect(item.mods).toContain("+38% to Fire Resistance");
+    expect(item.mods).toContain("+12% to Cold Resistance");
+    expect(item.mods).not.toContain("Doom Shell");
+  });
+
+  it("leaves mods empty for subtag-style items without a Rarity anchor", () => {
+    const item = parseBuildXml(SAMPLE_XML).items[0];
+    expect(item.mods).toEqual([]);
+    expect(item.name).toBe("Smoke Bow");
+  });
+});
+
 describe("parseBuildXml — skills", () => {
   it("parses two skill groups", () => {
     const summary = parseBuildXml(SAMPLE_XML);
