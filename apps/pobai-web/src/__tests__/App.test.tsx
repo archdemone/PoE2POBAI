@@ -99,6 +99,42 @@ describe("App REST flows", () => {
     expect(body.messages).toEqual([{ role: "user", content: "How are my defenses?" }]);
   });
 
+  it("sends a saved API key and model with chat requests", async () => {
+    localStorage.clear();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/builds")) return jsonResponse(builds);
+      if (url.endsWith("/api/status")) return jsonResponse({ ok: true, pob2Bridge: { connected: false, url: "http://127.0.0.1:22804" } });
+      if (url.endsWith("/api/chat")) return jsonResponse({ message: { content: "Live answer", toolTrace: [] } });
+      return jsonResponse({ error: "not found" }, 404);
+    });
+    globalThis.fetch = fetchMock;
+
+    render(<App />);
+
+    // Open settings, enter a key and model, save.
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    const dialog = screen.getByRole("dialog", { name: "Chat settings" });
+    fireEvent.change(within(dialog).getByPlaceholderText("sk-or-v1-..."), { target: { value: "sk-or-test-123" } });
+    fireEvent.change(within(dialog).getByPlaceholderText("openai/gpt-4o-mini"), { target: { value: "anthropic/claude-3.5-sonnet" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    // Status bar should now reflect live mode and persist the key.
+    expect(screen.getByText("Chat: Live · anthropic/claude-3.5-sonnet")).toBeTruthy();
+    expect(localStorage.getItem("pobai.apiKey")).toBe("sk-or-test-123");
+
+    fireEvent.click(await screen.findByText("My Witch"));
+    fireEvent.change(screen.getByPlaceholderText("Ask about this build..."), { target: { value: "Help" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Live answer")).toBeTruthy();
+    const chatCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/api/chat"));
+    const body = JSON.parse(String(chatCall?.[1]?.body)) as { apiKey: string; model: string };
+    expect(body.apiKey).toBe("sk-or-test-123");
+    expect(body.model).toBe("anthropic/claude-3.5-sonnet");
+    localStorage.clear();
+  });
+
   it("imports the current live PoB build through the bridge export endpoint", async () => {
     const xml = "<PathOfBuilding2><Build characterName=\"LivePoB\" className=\"Ranger\" /></PathOfBuilding2>";
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

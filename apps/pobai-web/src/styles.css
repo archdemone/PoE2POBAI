@@ -942,6 +942,19 @@ a { color: #f0c56c; }
 .node-name { font-size: 0.82rem; font-weight: 600; }
 .node-stats { color: #a8957c; font-size: 0.74rem; }
 
+/* Chat settings */
+.settings-label { color: #d6c5ae; font-size: 0.82rem; font-weight: 600; margin-top: 0.5rem; }
+.settings-hint { color: #7a6a58; font-size: 0.74rem; }
+.status-settings-btn { font-size: 0.75rem; padding: 0.3rem 0.6rem; }
+.btn-ghost {
+  background: none;
+  border: 1px solid #4b382b;
+  border-radius: 8px;
+  color: #a8957c;
+  margin-right: auto;
+  padding: 0.5rem 0.75rem;
+}
+
 @media (max-width: 960px) {
   .app {
     flex-direction: column;

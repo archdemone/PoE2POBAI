@@ -5,12 +5,24 @@ import { ToolLoop } from "./components/ToolLoop";
 import { BuildSidebar } from "./components/BuildSidebar";
 import { BuildCompare } from "./components/BuildCompare";
 import { ImportModal } from "./components/ImportModal";
+import { SettingsModal } from "./components/SettingsModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import type { ApiStatus, ChatMessage, ToolCallState, BuildInfo } from "./types";
 import "./styles.css";
 
 const apiBaseUrl = import.meta.env.VITE_POBAI_API_URL ?? "http://localhost:3001";
 const defaultModel = import.meta.env.VITE_POBAI_MODEL ?? "openai/gpt-4o-mini";
+
+const API_KEY_STORAGE = "pobai.apiKey";
+const MODEL_STORAGE = "pobai.model";
+
+function readStorage(key: string, fallback: string): string {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 interface ChatResponse {
   message?: {
@@ -85,10 +97,23 @@ export function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [tools, setTools] = useState<ToolCallState[]>([]);
   const [importOpen, setImportOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [status, setStatus] = useState("");
   const [apiStatus, setApiStatus] = useState<ApiStatus | null>(null);
   const [importingCurrent, setImportingCurrent] = useState(false);
   const [chatPending, setChatPending] = useState(false);
+  const [apiKey, setApiKey] = useState(() => readStorage(API_KEY_STORAGE, ""));
+  const [model, setModel] = useState(() => readStorage(MODEL_STORAGE, defaultModel));
+
+  function handleSaveSettings(nextKey: string, nextModel: string) {
+    setApiKey(nextKey);
+    setModel(nextModel);
+    try {
+      if (nextKey) localStorage.setItem(API_KEY_STORAGE, nextKey);
+      else localStorage.removeItem(API_KEY_STORAGE);
+      localStorage.setItem(MODEL_STORAGE, nextModel);
+    } catch {}
+  }
 
   useEffect(() => {
     loadBuilds();
@@ -193,8 +218,8 @@ export function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          apiKey: "",
-          model: defaultModel,
+          apiKey,
+          model,
           snapshotId: activeBuildId,
           messages: nextMessages,
         }),
@@ -211,7 +236,7 @@ export function App() {
     } finally {
       setChatPending(false);
     }
-  }, [activeBuildId, messages]);
+  }, [activeBuildId, messages, apiKey, model]);
 
   return (
     <ErrorBoundary>
@@ -223,6 +248,10 @@ export function App() {
             <span className={apiStatus?.pob2Bridge?.connected ? "status-ok" : "status-warn"}>
               PoB bridge: {apiStatus?.pob2Bridge?.connected ? "connected" : "offline"}
             </span>
+            <span className={apiKey ? "status-ok" : "status-warn"}>
+              Chat: {apiKey ? `Live · ${model}` : "Demo mode"}
+            </span>
+            <button className="btn-secondary status-settings-btn" onClick={() => setSettingsOpen(true)}>Settings</button>
             {chatPending && <span>Sending...</span>}
             {status && <span>{status}</span>}
           </div>
@@ -243,6 +272,13 @@ export function App() {
           </div>
         </div>
         <ImportModal open={importOpen} onClose={() => setImportOpen(false)} onImport={handleImport} />
+        <SettingsModal
+          open={settingsOpen}
+          apiKey={apiKey}
+          model={model}
+          onClose={() => setSettingsOpen(false)}
+          onSave={handleSaveSettings}
+        />
       </div>
     </ErrorBoundary>
   );
