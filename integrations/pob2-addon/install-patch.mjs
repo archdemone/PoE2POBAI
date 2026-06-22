@@ -7,6 +7,7 @@
  *   node integrations/pob2-addon/install-patch.mjs --pob2-dir "C:\PathOfBuilding2"
  *   node integrations/pob2-addon/install-patch.mjs --dry-run   (check only, no changes)
  *   node integrations/pob2-addon/install-patch.mjs --revert    (restore backup)
+ *   set POB2_DIR=C:\PathOfBuilding2
  *
  * Requirements: Node.js >= 22
  */
@@ -23,7 +24,7 @@ import { existsSync } from "node:fs";
 const HELPER_BLOCK = `
 -- [[ PoBAI Integration ]] --
 local POBAI_SERVER = "http://localhost:3001"
-local POBAI_UI     = "http://localhost:5173"
+local POBAI_UI     = "http://localhost:3001"
 
 local function pobai_openBrowser(url)
     if launch.OpenURL then
@@ -78,7 +79,7 @@ const BUTTON_BLOCK = `
             pobai_sendBuild(self.build)
         end
     )
-    controls.sendToPoBAI.tooltipText = "Export this build to PoBAI for AI build advice (opens localhost:5173)"
+    controls.sendToPoBAI.tooltipText = "Export this build to PoBAI for AI build advice (opens localhost:3001)"
     -- [[ /PoBAI Send Button ]] --
 `;
 
@@ -166,9 +167,11 @@ async function applyPatch(content) {
   const before = content.slice(0, classIdx);
   const afterClass = content.slice(classIdx);
   const result = before + HELPER_BLOCK + "\n\n" + afterClass;
+  const helperOffset = classIdx <= closingParen ? HELPER_BLOCK.length + 2 : 0;
+  const adjustedClosingParen = closingParen + helperOffset;
 
   // Insert button block after closing paren of generateCodeOut
-  const afterGenOut = result.slice(0, closingParen + 1) + "\n" + BUTTON_BLOCK + result.slice(closingParen + 1);
+  const afterGenOut = result.slice(0, adjustedClosingParen + 1) + "\n" + BUTTON_BLOCK + result.slice(adjustedClosingParen + 1);
 
   return { ok: true, content: result };
 }
@@ -176,22 +179,43 @@ async function applyPatch(content) {
 // -------------------------------------------------------------------------
 // Main
 // -------------------------------------------------------------------------
+function printHelp() {
+  console.log(`PoBAI Lua Patch Installer
+
+Usage:
+  node integrations/pob2-addon/install-patch.mjs [options]
+
+Options:
+  --pob2-dir "path"  PoB2 install directory. Also reads POB2_DIR.
+  --dry-run          Check what would change without modifying PoB2.
+  --revert           Restore the ImportTab.lua backup.
+  --help             Show this help.
+`);
+}
+
 const { values: args } = parseArgs({
   args: process.argv.slice(2),
   options: {
     "pob2-dir": { type: "string" },
     "dry-run": { type: "boolean", default: false },
     revert: { type: "boolean", default: false },
+    help: { type: "boolean", default: false },
   },
   strict: false,
 });
 
-const pob2Dir = await findPob2Dir(args["pob2-dir"]);
+if (args.help) {
+  printHelp();
+  process.exit(0);
+}
+
+const pob2Dir = await findPob2Dir(args["pob2-dir"] ?? process.env.POB2_DIR ?? process.env.POB2_INSTALL_DIR);
 if (!pob2Dir) {
   console.error("\nCould not find PoB2 installation directory.");
   console.error("Tried:");
   candidateInstallDirs().forEach((p) => console.error(`  ${p}`));
   console.error('\nPass the correct path with --pob2-dir "path/to/PoB2"');
+  console.error('or set POB2_DIR before running the installer.');
   process.exit(1);
 }
 

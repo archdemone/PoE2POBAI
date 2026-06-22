@@ -1,9 +1,46 @@
 # PoB2 → PoBAI integration
 
-Three tools:
+Four tools:
 - **`export.mjs`** — CLI picker: reads saved PoB2 builds from disk and sends one to PoBAI (works immediately, no PoB2 modification).
 - **`watch.mjs`** — auto-importer: watches your PoB2 Builds directory and imports on every save.
 - **`install-patch.mjs`** — in-app button: patches PoB2's `ImportTab.lua` to add a "Send to PoBAI" button inside PoB2 itself.
+- **`install-bridge.mjs`** — experimental bidirectional bridge installer for live PoB2 calculations and full-build XML what-if tests.
+
+---
+
+## Recommended Windows launch
+
+From the repo root:
+
+```bat
+start.bat
+```
+
+This builds PoBAI, starts the local website/API at `http://localhost:3001`, opens the browser, and launches PoB2 when it can find the executable.
+
+If PoB2 is not detected, configure either the executable or install directory:
+
+```bat
+set POB2_EXE=C:\PathOfBuilding2\Path of Building.exe
+set POB2_DIR=C:\PathOfBuilding2
+start.bat
+```
+
+You can also pass paths directly:
+
+```bat
+start.bat --pob-exe "C:\PathOfBuilding2\Path of Building.exe"
+start.bat --pob2-dir "C:\PathOfBuilding2"
+```
+
+To install the experimental live bridge during launch, run:
+
+```bat
+start.bat --pob2-dir "C:\PathOfBuilding2" --bridge-dry-run
+start.bat --pob2-dir "C:\PathOfBuilding2" --install-bridge
+```
+
+Use the dry run first. The bridge installer patches PoB2 files and creates backups.
 
 ---
 
@@ -39,7 +76,7 @@ node integrations/pob2-addon/export.mjs --builds-dir "~/.local/share/PathOfBuild
 |---|---|---|
 | `--builds-dir` | auto-detected | Path to PoB2 Builds directory |
 | `--server` | `http://localhost:3001` | PoBAI API server URL |
-| `--ui` | `http://localhost:5173` | PoBAI web UI URL |
+| `--ui` | `http://localhost:3001` | PoBAI web UI URL |
 | `--label` | filename | Override the snapshot label |
 | `--pick N` | interactive | Non-interactive: select build N without prompting |
 
@@ -50,7 +87,7 @@ PoBAI — Path of Building 2 export tool
 ─────────────────────────────────────────────
 Builds dir : C:\Users\you\AppData\Roaming\PathOfBuilding2\Builds
 Server     : http://localhost:3001
-UI         : http://localhost:5173
+UI         : http://localhost:3001
 
    1. TwisterDeadeye                     Ranger / Deadeye  lvl 82  "Smokewraith"
    2. FireballSorceress                  Sorceress  lvl 67
@@ -63,7 +100,7 @@ Importing "TwisterDeadeye" …
   Character : Ranger · Deadeye · lvl 82
   Skills    : Twister main setup, Utility
 
-Opening PoBAI at http://localhost:5173 …
+Opening PoBAI at http://localhost:3001 …
 ```
 
 ### Workflow
@@ -90,7 +127,7 @@ Optional flags:
 
 | Flag | Description |
 |------|-------------|
-| `--pob2-dir "path"` | Override auto-detected PoB2 install directory |
+| `--pob2-dir "path"` | Override auto-detected PoB2 install directory. Also reads `POB2_DIR` |
 | `--dry-run` | Check what would change without modifying anything |
 | `--revert` | Restore backup and undo the patch |
 
@@ -109,8 +146,33 @@ The script:
 
 ### Requirements
 
-- PoBAI server running: `node apps/pobai-server/src/index.mjs` (or `npm run dev`)
+- PoBAI server running: `start.bat` or `npm run launch`
 - Node.js 22+
+
+---
+
+## Stage 3 — Experimental live calculation bridge
+
+`install-bridge.mjs` installs `pobai_bridge.lua`, patches PoB2 so PoBAI can call a local bridge on `127.0.0.1:22804`, and exposes the calc module for live stat reads.
+
+```bash
+node integrations/pob2-addon/install-bridge.mjs
+```
+
+Optional flags:
+
+| Flag | Description |
+|------|-------------|
+| `--pob2-dir "path"` | Override auto-detected PoB2 install directory. Also reads `POB2_DIR` |
+| `--dry-run` | Check what would change without modifying anything |
+| `--revert` | Restore backups and undo the patch |
+
+Current maturity:
+- Tested against the Node mock bridge and static Lua/installer checks.
+- Not yet validated in a real PoB2 runtime.
+- Requires PoB2 to provide LuaSocket (`socket`) and `dkjson`.
+- What-if tools import full modified build XML. They do not safely patch partial `<Skill>` or `<Item>` fragments.
+- A what-if import can mutate the active PoB2 build. Export the current build first so it can be restored.
 
 ---
 

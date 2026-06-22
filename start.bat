@@ -1,4 +1,7 @@
 @echo off
+setlocal
+cd /d "%~dp0"
+
 echo.
 echo  PoBAI - Path of Building AI Advisor
 echo  =====================================
@@ -14,20 +17,20 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo  Building UI...
-call npm run build --workspace apps/pobai-web
+echo  Launching PoBAI...
+echo.
+echo  Tip: set POB2_EXE or pass --pob-exe to launch Path of Building 2 too.
+echo       Example: start.bat --pob-exe "C:\PathOfBuilding2\Path of Building.exe"
+echo.
+
+call npm run launch -- %*
 if errorlevel 1 (
-    echo  ERROR: UI build failed. Run "npm install" first.
+    echo.
+    echo  ERROR: PoBAI launch failed. Run "npm install" first if dependencies are missing.
     pause
     exit /b 1
 )
 
 echo.
-echo  Starting PoBAI server...
-echo  Open your browser at http://localhost:3001
-echo.
-echo  Press Ctrl+C to stop.
-echo.
-
-node apps/pobai-server/src/index.mjs
+echo  PoBAI launcher finished.
 pause
