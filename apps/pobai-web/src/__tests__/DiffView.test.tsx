@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { DiffView, type BuildCompareResult } from "../components/DiffView";
 
 const baseDiff = {
@@ -74,6 +74,45 @@ describe("DiffView", () => {
     expect(document.body.textContent).toContain("Passive tree to copy");
     expect(document.body.textContent).toContain("+3");
     expect(document.body.textContent).toContain("-1");
+  });
+
+  it("renders near-equal stats as neutral/white with a matched tag", () => {
+    const diff: BuildCompareResult = {
+      ...baseDiff,
+      statDiffs: [
+        { label: "Block", baseValue: 250, targetValue: 252, delta: 2, near: true, status: "near", color: "neutral" },
+      ],
+    };
+    render(<DiffView diff={diff} />);
+    expect(document.body.textContent).toContain("≈ matched");
+    expect(screen.getByText("252").classList.contains("stat-neutral")).toBe(true);
+  });
+
+  it("renders per-gem add / drop / relevel for changed skill groups", () => {
+    const diff: BuildCompareResult = {
+      ...baseDiff,
+      skills: {
+        rows: [
+          {
+            key: "la",
+            status: "changed",
+            changed: true,
+            base: { label: "Lightning Arrow", gems: [{ name: "Chain" }, { name: "Lightning Arrow", level: 20 }] },
+            target: { label: "Lightning Arrow", gems: [{ name: "Fork" }, { name: "Lightning Arrow", level: 21 }] },
+            gemDiff: {
+              added: [{ name: "Fork" }],
+              removed: [{ name: "Chain" }],
+              changed: [{ name: "Lightning Arrow", base: { name: "Lightning Arrow", level: 20 }, target: { name: "Lightning Arrow", level: 21 } }],
+            },
+          },
+        ],
+      },
+    };
+    render(<DiffView diff={diff} />);
+    expect(document.body.textContent).toContain("Skill groups to update");
+    expect(document.body.textContent).toContain("+ Fork");
+    expect(document.body.textContent).toContain("− Chain");
+    expect(document.body.textContent).toContain("Lightning Arrow");
   });
 
   it("renders the backend compare response shape", () => {

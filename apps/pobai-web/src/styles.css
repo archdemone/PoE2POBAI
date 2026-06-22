@@ -768,6 +768,169 @@ a { color: #f0c56c; }
   color: #d6c5ae;
 }
 
+/* --- Guided compare: stepper + stages --- */
+.compare-stepper {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.compare-stepper li button {
+  width: 100%;
+  background: #1b1208;
+  border: 1px solid #3a2e24;
+  border-radius: 8px;
+  color: #7a6a58;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.5rem 0.5rem;
+  text-align: left;
+}
+.compare-stepper li button:disabled { cursor: default; }
+.compare-stepper li.step-active button {
+  border-color: #b9893f;
+  color: #f0c56c;
+}
+.compare-stepper .step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  background: #2f261d;
+  color: #d6c5ae;
+  font-size: 0.72rem;
+}
+.compare-stepper li.step-active .step-num {
+  background: #b9893f;
+  color: #140f0c;
+}
+
+.compare-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  border-top: 1px solid #2f261d;
+  padding-top: 0.75rem;
+}
+.stage-title {
+  color: #f0c56c;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.compare-slots {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 1fr 1fr;
+}
+.build-slot {
+  border: 1px solid #3a2e24;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.65rem;
+}
+.build-slot-filled { border-color: #2f6f45; }
+.build-slot-head { display: flex; flex-direction: column; gap: 0.1rem; }
+.build-slot-head strong { color: #f4efe6; font-size: 0.86rem; }
+.build-slot-hint { color: #7a6a58; font-size: 0.72rem; }
+.build-slot select { width: 100%; }
+.build-slot-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.build-slot-actions .btn-secondary { flex: 1; font-size: 0.78rem; padding: 0.45rem 0.5rem; }
+
+.compare-builds {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+.compare-builds .compare-build-summary { flex: 1 1 200px; }
+.compare-vs {
+  align-self: center;
+  color: #7a6a58;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.btn-primary {
+  align-self: center;
+  background: #b9893f;
+  border: 1px solid #d6a44f;
+  border-radius: 8px;
+  color: #140f0c;
+  font-weight: 700;
+  padding: 0.55rem 0.9rem;
+  white-space: nowrap;
+}
+.btn-primary:disabled { opacity: 0.5; }
+.btn-link {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: #f0c56c;
+  cursor: pointer;
+  font-size: 0.82rem;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.compare-scoreboard {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+}
+.score-card {
+  align-items: center;
+  border: 1px solid #3a2e24;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.6rem 0.4rem;
+}
+.score-value { font-size: 1.4rem; font-weight: 800; }
+.score-label { color: #a8957c; font-size: 0.7rem; text-align: center; }
+.score-changed .score-value { color: #f0c56c; }
+.score-matched { border-color: #2f6f45; }
+.score-matched .score-value { color: #8bb59a; }
+.score-added .score-value { color: #3fb950; }
+.score-removed .score-value { color: #f85149; }
+
+/* --- Granular diff rows --- */
+.stat-diff-head { background: #1b1208; }
+.stat-diff-head span { color: #7a6a58; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
+.stat-diff-near { opacity: 0.78; }
+.stat-near-tag {
+  color: #8bb59a;
+  font-size: 0.68rem;
+  font-weight: 600;
+  margin-left: 0.4rem;
+}
+.diff-item-block { flex-direction: column; align-items: stretch; gap: 0.3rem; }
+.gem-diff, .mod-diff { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.gem-pill, .mod-pill {
+  background: #1b1208;
+  border: 1px solid #3a2e24;
+  border-radius: 6px;
+  font-size: 0.76rem;
+  padding: 0.2rem 0.45rem;
+}
+.gem-added { color: #3fb950; }
+.gem-removed { color: #f85149; }
+.gem-changed { color: #f0c56c; }
+.tree-links { display: flex; gap: 0.75rem; }
+.tree-links a { color: #f0c56c; font-size: 0.8rem; }
+.diff-note { color: #7a6a58; font-size: 0.74rem; font-style: italic; }
+
 @media (max-width: 960px) {
   .app {
     flex-direction: column;
