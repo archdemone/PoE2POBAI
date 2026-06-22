@@ -85,18 +85,25 @@ export function BuildCompare({
   const overviewRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
 
+  // Seed "My build" once from a valid current selection, else the active build,
+  // else the first build. Crucially we KEEP an existing valid selection so that
+  // importing a second build (which becomes the active build) does not hijack the
+  // "My build" slot — the new build flows into "Build to copy" instead.
   useEffect(() => {
-    const preferredBase = activeBuildId && buildIds.includes(activeBuildId) ? activeBuildId : buildIds[0] ?? "";
     setBaseId((current) => {
-      if (activeBuildId && buildIds.includes(activeBuildId)) return activeBuildId;
       if (current && buildIds.includes(current)) return current;
-      return preferredBase;
-    });
-    setTargetId((current) => {
-      if (current && buildIds.includes(current) && current !== preferredBase) return current;
-      return buildIds.find((id) => id !== preferredBase) ?? "";
+      if (activeBuildId && buildIds.includes(activeBuildId)) return activeBuildId;
+      return buildIds[0] ?? "";
     });
   }, [activeBuildId, buildIds]);
+
+  // "Build to copy" is any build that isn't the base; keep a valid manual choice.
+  useEffect(() => {
+    setTargetId((current) => {
+      if (current && buildIds.includes(current) && current !== baseId) return current;
+      return buildIds.find((id) => id !== baseId) ?? "";
+    });
+  }, [baseId, buildIds]);
 
   const baseBuild = builds.find((build) => build.snapshot_id === baseId);
   const targetBuild = builds.find((build) => build.snapshot_id === targetId);

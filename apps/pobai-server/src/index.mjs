@@ -1056,13 +1056,15 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/builds") {
-    const builds = [...snapshots.values()].map((s) => ({
-      snapshot_id: s.id,
-      label: s.label,
-      source: s.source,
-      created_at: s.createdAt,
-      character: s.summary?.character,
-    }));
+    const builds = [...snapshots.values()]
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt)) // oldest first, stable across restarts
+      .map((s) => ({
+        snapshot_id: s.id,
+        label: s.label,
+        source: s.source,
+        created_at: s.createdAt,
+        character: s.summary?.character,
+      }));
     sendJson(response, 200, builds);
     return;
   }

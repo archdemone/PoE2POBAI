@@ -71,6 +71,36 @@ describe("BuildCompare", () => {
     );
   });
 
+  it("does not swap slots when a second build is imported (becomes the active build)", async () => {
+    // Reproduces the reported bug: import your build (A) first, then a guide
+    // build (B). Importing B makes it the active build. The "My build" slot must
+    // stay A and the new build must flow into "Build to copy", not swap in.
+    const witch: BuildInfo = {
+      snapshot_id: "A", label: "A - My Witch", source: "pob-xml", created_at: "2026-01-01T00:00:00.000Z",
+      character: { className: "Witch", ascendancy: "Infernalist", level: "90" },
+    };
+    const merc: BuildInfo = {
+      snapshot_id: "B", label: "B - Guide Merc", source: "pob-xml", created_at: "2026-01-02T00:00:00.000Z",
+      character: { className: "Mercenary", ascendancy: "Witchhunter", level: "95" },
+    };
+    globalThis.fetch = vi.fn(async () => jsonResponse({}));
+
+    // Step 1: only "my" build imported -> it is the active build -> seeds "My build".
+    const { rerender } = render(
+      <BuildCompare builds={[witch]} activeBuildId="A" apiBaseUrl="http://localhost:3001" />,
+    );
+    const baseSelect = () => screen.getByLabelText("1. My build") as HTMLSelectElement;
+    const targetSelect = () => screen.getByLabelText("2. Build to copy") as HTMLSelectElement;
+    expect(baseSelect().value).toBe("A");
+
+    // Step 2: import the guide build -> it becomes the active build.
+    rerender(<BuildCompare builds={[witch, merc]} activeBuildId="B" apiBaseUrl="http://localhost:3001" />);
+
+    await waitFor(() => expect(targetSelect().value).toBe("B"));
+    expect(baseSelect().value).toBe("A"); // still my build, not swapped
+    expect(targetSelect().value).toBe("B"); // guide build is the one to copy
+  });
+
   it("exposes live PoB import when the bridge is connected", () => {
     globalThis.fetch = vi.fn(async () => jsonResponse({}));
     const onImportCurrent = vi.fn(async () => undefined);
