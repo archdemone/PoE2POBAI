@@ -144,9 +144,20 @@ Imported builds are stored as immutable snapshots. Re-import from PoB2 to pick u
 
 1. Validate `pobai_bridge.lua` against a real PoB2 runtime, especially LuaSocket/dkjson availability and calc-module access.
 2. Make what-if bridge tests reversible so PoBAI restores the user's original live build after each experiment.
-3. Map passive node IDs to readable node names (needs PoB tree data) — the compare view currently shows added/removed node counts plus both tree URLs.
-4. Add API-key/model settings to the web UI for live OpenRouter chat instead of local demo mode only.
+3. Add API-key/model settings to the web UI for live OpenRouter chat instead of local demo mode only.
 
 The guided 3-step build compare (load both → see differences → swap checklist) now covers
-per-gem level/quality diffs, per-item affix diffs, and a "close enough" tolerance that renders
-near-identical stats white instead of green/red.
+per-gem level/quality diffs, per-item affix diffs, a "close enough" tolerance that renders
+near-identical stats white instead of green/red, and named passive nodes with their stats
+(keystones/notables/masteries) for added/removed tree nodes.
+
+### Passive tree data
+
+The compare view resolves passive node ids to names + stats from compact indexes under
+`data/tree/<version>.json`, generated from Path of Building 2's bundled `TreeData`. They're
+checked in so compare works offline. Regenerate them after a PoB2 tree update:
+
+```bash
+npm run tree:build                       # auto-detects the PoB2 install
+npm run tree:build -- --pob2-dir "C:\PathOfBuilding2"
+```

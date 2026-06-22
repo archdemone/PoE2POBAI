@@ -931,6 +931,17 @@ a { color: #f0c56c; }
 .tree-links a { color: #f0c56c; font-size: 0.8rem; }
 .diff-note { color: #7a6a58; font-size: 0.74rem; font-style: italic; }
 
+/* Passive node detail (names + stats grouped by type) */
+.node-groups { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.45rem; }
+.node-groups-title { font-size: 0.74rem; font-weight: 700; letter-spacing: 0.04em; margin: 0; text-transform: uppercase; }
+.node-group { display: flex; flex-direction: column; gap: 0.15rem; }
+.node-group-label { color: #7a6a58; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
+.node-list { display: flex; flex-direction: column; gap: 0.15rem; list-style: none; margin: 0; padding: 0; }
+.node-row { display: flex; flex-direction: column; gap: 0.05rem; padding: 0.15rem 0; }
+.node-row.node-keystone, .node-row.node-notable { border-left: 2px solid #4b382b; padding-left: 0.5rem; }
+.node-name { font-size: 0.82rem; font-weight: 600; }
+.node-stats { color: #a8957c; font-size: 0.74rem; }
+
 @media (max-width: 960px) {
   .app {
     flex-direction: column;

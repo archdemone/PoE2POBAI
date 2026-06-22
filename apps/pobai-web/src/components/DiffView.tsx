@@ -89,11 +89,28 @@ interface CollectionComparison<T> {
   rows?: Array<CollectionRow<T>>;
 }
 
+interface TreeNode {
+  id: string;
+  name: string;
+  type: "keystone" | "notable" | "mastery" | "ascendancy" | "jewel" | "small" | "unknown";
+  stats?: string[];
+  ascendancy?: string;
+}
+
+interface NodeDescription {
+  groups?: Partial<Record<TreeNode["type"], TreeNode[]>>;
+  named?: number;
+  total?: number;
+}
+
 interface PassiveTreeComparison {
   addedNodeIds?: string[];
   removedNodeIds?: string[];
   sharedNodeCount?: number;
   url?: StatChange;
+  nodesToAllocate?: NodeDescription;
+  nodesToRemove?: NodeDescription;
+  treeDataVersion?: { version: string; exact: boolean } | null;
 }
 
 export interface BuildCompareResult {
@@ -318,6 +335,16 @@ export function DiffView({ diff }: { diff: BuildCompareResult }) {
   const sharedNodes = diff.passiveTree?.sharedNodeCount;
   const baseTreeUrl = (diff.passiveTree?.url?.baseValue ?? diff.passiveTree?.url?.base) as string | undefined;
   const targetTreeUrl = (diff.passiveTree?.url?.targetValue ?? diff.passiveTree?.url?.target) as string | undefined;
+  const treeData = diff.passiveTree?.treeDataVersion;
+  const allocNamed = diff.passiveTree?.nodesToAllocate?.named ?? 0;
+  const removeNamed = diff.passiveTree?.nodesToRemove?.named ?? 0;
+  const treeDataNote = !treeData
+    ? "Node names need PoB's tree data — open both trees to line them up visually."
+    : !treeData.exact
+      ? `Node details shown from tree data ${treeData.version} (closest available to this build's version).`
+      : allocNamed === 0 && removeNamed === 0
+        ? "Couldn't match these node ids to tree data — open both trees to compare visually."
+        : "";
 
   const skillsChangedCount = skillsChangedRows.length + legacySkillsChanged.length;
   const itemsChangedCount = itemsChangedRows.length + legacyItemsChanged.length;
@@ -449,13 +476,17 @@ export function DiffView({ diff }: { diff: BuildCompareResult }) {
             </span>
             {typeof sharedNodes === "number" && <span className="diff-item-detail">{sharedNodes} nodes already shared</span>}
           </div>
+
+          <NodeGroups title="Allocate (in the build to copy)" tone="added" desc={diff.passiveTree?.nodesToAllocate} />
+          <NodeGroups title="Remove (only in my build)" tone="removed" desc={diff.passiveTree?.nodesToRemove} />
+
           {(baseTreeUrl || targetTreeUrl) && (
             <div className="tree-links">
               {baseTreeUrl && <a href={baseTreeUrl} target="_blank" rel="noreferrer">Open my tree</a>}
               {targetTreeUrl && <a href={targetTreeUrl} target="_blank" rel="noreferrer">Open tree to copy</a>}
             </div>
           )}
-          <span className="diff-note">Node names need PoB's tree data — open both trees to line them up visually.</span>
+          {treeDataNote && <span className="diff-note">{treeDataNote}</span>}
         </div>
       )}
     </div>
@@ -490,6 +521,43 @@ function SkillChangeRow({ row }: { row: CollectionRow<SkillChange> }) {
           <span className="diff-item-detail">{targetGems.map(gemText).join(", ") || "Adjust to match"}</span>
         )}
       </div>
+    </div>
+  );
+}
+
+const NODE_TYPE_LABELS: Record<TreeNode["type"], string> = {
+  keystone: "Keystones",
+  notable: "Notables",
+  mastery: "Masteries",
+  ascendancy: "Ascendancy",
+  jewel: "Jewel sockets",
+  small: "Small passives",
+  unknown: "Other nodes",
+};
+const NODE_TYPE_ORDER: TreeNode["type"][] = ["keystone", "notable", "mastery", "ascendancy", "jewel", "small", "unknown"];
+
+function NodeGroups({ title, tone, desc }: { title: string; tone: "added" | "removed"; desc?: NodeDescription }) {
+  const groups = desc?.groups;
+  if (!groups || Object.keys(groups).length === 0) return null;
+  const sign = tone === "added" ? "+" : "−";
+  return (
+    <div className="node-groups">
+      <h5 className={`node-groups-title gem-${tone}`}>{title}</h5>
+      {NODE_TYPE_ORDER.filter((type) => groups[type]?.length).map((type) => (
+        <div key={type} className="node-group">
+          <span className="node-group-label">{NODE_TYPE_LABELS[type]} ({groups[type]!.length})</span>
+          <ul className="node-list">
+            {groups[type]!.map((node) => (
+              <li key={node.id} className={`node-row node-${type}`}>
+                <span className={`node-name gem-${tone}`}>{sign} {node.name}</span>
+                {node.stats && node.stats.length > 0 && (
+                  <span className="node-stats">{node.stats.join(" · ")}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }

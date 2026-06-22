@@ -113,6 +113,25 @@ Sockets: R-R-G
   });
 });
 
+describe("parseBuildXml — passive tree", () => {
+  it("reads allocated nodes from a Spec nodes attribute", () => {
+    const xml = `<PathOfBuilding2><Build className="Witch" level="80" />
+      <Spec treeVersion="0_5" nodes="4,55,52" masteryEffects="{12345,67}" /></PathOfBuilding2>`;
+    const tree = parseBuildXml(xml).passiveTree;
+    expect(tree.allocatedNodeIds).toEqual(["4", "55", "52"]);
+    expect(tree.allocatedNodeCount).toBe(3);
+    expect(tree.treeVersion).toBe("0_5");
+    expect(tree.masteryEffects).toEqual([{ node: "12345", effect: "67" }]);
+  });
+
+  it("still reads legacy <Node> tags and de-dupes against Spec nodes", () => {
+    const xml = `<PathOfBuilding2><Build className="Witch" />
+      <Spec nodes="100,200" /><Tree><Node id="200" /><Node id="300" /></Tree></PathOfBuilding2>`;
+    const tree = parseBuildXml(xml).passiveTree;
+    expect(tree.allocatedNodeIds).toEqual(["100", "200", "300"]);
+  });
+});
+
 describe("parseBuildXml — skills", () => {
   it("parses two skill groups", () => {
     const summary = parseBuildXml(SAMPLE_XML);

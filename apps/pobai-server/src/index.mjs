@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { parseBuild } from "@pobai/parser";
 import { Poe2McpClient } from "./poe2-mcp-client.mjs";
 import { resolveToXml, ImportError } from "./import-resolver.mjs";
+import { resolveTreeIndex, describeNodes } from "./tree-data.mjs";
 
 // PORT is set by Render/Railway; POBAI_SERVER_PORT is the local dev override
 const port = Number(process.env.PORT ?? process.env.POBAI_SERVER_PORT ?? 3001);
@@ -488,6 +489,13 @@ function comparePassiveTree(baseTree = {}, targetTree = {}) {
   });
   const url = compareValue("url", baseTree.url, targetTree.url, { label: "Tree URL", category: "passiveTree" });
 
+  // Enrich the id deltas with node names / stats from the bundled tree data, so
+  // the UI can show "allocate Zealot's Oath (Energy Shield does not Recharge)"
+  // rather than a bare node id. Prefer the target build's tree version.
+  const treeIndex = resolveTreeIndex(targetTree.treeVersion || baseTree.treeVersion);
+  const nodesToAllocate = describeNodes(addedNodeIds, treeIndex);
+  const nodesToRemove = describeNodes(removedNodeIds, treeIndex);
+
   return {
     base: baseTree,
     target: targetTree,
@@ -497,6 +505,9 @@ function comparePassiveTree(baseTree = {}, targetTree = {}) {
     addedNodeIds,
     removedNodeIds,
     sharedNodeCount: sharedNodeIds.length,
+    nodesToAllocate,
+    nodesToRemove,
+    treeDataVersion: treeIndex ? { version: treeIndex.version, exact: treeIndex.exact } : null,
     changed: allocatedNodeCount.changed || treeVersion.changed || url.changed || addedNodeIds.length > 0 || removedNodeIds.length > 0,
   };
 }

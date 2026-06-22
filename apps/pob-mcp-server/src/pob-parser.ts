@@ -51,6 +51,7 @@ export interface ParsedPassiveTree {
   treeVersion?: string;
   allocatedNodeCount?: number;
   allocatedNodeIds?: string[];
+  masteryEffects?: Array<{ node: string; effect: string }>;
 }
 
 export interface BuildSummary {

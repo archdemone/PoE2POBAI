@@ -214,15 +214,27 @@ export function parseBuildXml(xml) {
     .filter((skill) => skill.gems.length > 0 || skill.label);
 
   const tree = firstTagAttrs(xml, "Tree");
-  const treeSpec = firstTagAttrs(xml, "Spec");
-  const nodeIds = collectTagAttrs(xml, "Node")
+  // Real PoB2 exports store allocated passives in a <Spec nodes="1,2,3"> attribute
+  // (and mastery picks in masteryEffects), not as individual <Node> tags. Read the
+  // first Spec that carries a nodes list, and fall back to any <Node> tags.
+  const specBlock = collectTagAttrs(xml, "Spec").find((s) => s["nodes"]) ?? firstTagAttrs(xml, "Spec");
+  const specNodeIds = String(specBlock["nodes"] ?? "").match(/\d+/g) ?? [];
+  const tagNodeIds = collectTagAttrs(xml, "Node")
     .map((n) => n["id"] ?? n["nodeId"])
     .filter((id) => Boolean(id));
+  const nodeIds = [...new Set([...specNodeIds, ...tagNodeIds.map(String)])];
+  const masteryEffects = String(specBlock["masteryEffects"] ?? "")
+    .match(/\{(\d+),(\d+)\}/g)
+    ?.map((pair) => {
+      const [, node, effect] = pair.match(/\{(\d+),(\d+)\}/);
+      return { node, effect };
+    }) ?? [];
   summary.passiveTree = {
-    url: compact(textFromTag(xml, "URL") || tree["url"]),
-    treeVersion: compact(tree["treeVersion"] || treeSpec["treeVersion"]),
+    url: compact(textFromTag(xml, "URL") || tree["url"] || specBlock["url"]),
+    treeVersion: compact(tree["treeVersion"] || specBlock["treeVersion"]),
     allocatedNodeCount: nodeIds.length || undefined,
     allocatedNodeIds: nodeIds.length > 0 ? nodeIds : undefined,
+    masteryEffects: masteryEffects.length > 0 ? masteryEffects : undefined,
   };
 
   const lower = xml.toLowerCase();

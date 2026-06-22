@@ -256,6 +256,41 @@ describe("REST tool endpoints", () => {
     expect(releveled.level).toMatchObject({ baseValue: 20, targetValue: 21, color: "green" });
   });
 
+  it("parses <Spec nodes> and enriches passive node ids with names and stats", async () => {
+    // Real PoB2 exports store allocated passives in a Spec nodes="..." attribute.
+    // 0_5 tree: 4 = Shock Chance (small), 55 = Fast Acting Toxins (notable), 52 = Zealot's Oath (keystone).
+    const mine = await postJson("/api/build/import", {
+      source: "pob-xml",
+      label: "Tree Base",
+      payload: `<PathOfBuilding2><Build className="Witch" level="80" /><Spec treeVersion="0_5" nodes="4,55" /></PathOfBuilding2>`,
+    });
+    const guide = await postJson("/api/build/import", {
+      source: "pob-xml",
+      label: "Tree Target",
+      payload: `<PathOfBuilding2><Build className="Witch" level="90" /><Spec treeVersion="0_5" nodes="4,52" /></PathOfBuilding2>`,
+    });
+
+    const { data } = await postJson("/api/build/compare", {
+      baseId: mine.data.snapshot.id,
+      targetId: guide.data.snapshot.id,
+    });
+
+    expect(data.passiveTree.addedNodeIds).toEqual(["52"]);
+    expect(data.passiveTree.removedNodeIds).toEqual(["55"]);
+    expect(data.passiveTree.sharedNodeCount).toBe(1);
+    expect(data.passiveTree.treeDataVersion).toMatchObject({ version: "0_5", exact: true });
+
+    const keystone = data.passiveTree.nodesToAllocate.groups.keystone[0];
+    expect(keystone).toMatchObject({ id: "52", name: "Zealot's Oath", type: "keystone" });
+    expect(keystone.stats).toContain("Energy Shield does not Recharge");
+
+    const notable = data.passiveTree.nodesToRemove.groups.notable[0];
+    expect(notable).toMatchObject({ id: "55", name: "Fast Acting Toxins", type: "notable" });
+
+    await fetch(`http://localhost:${pobaiPort}/api/build/${mine.data.snapshot.id}`, { method: "DELETE" });
+    await fetch(`http://localhost:${pobaiPort}/api/build/${guide.data.snapshot.id}`, { method: "DELETE" });
+  });
+
   it("attaches per-property diffs to changed item slots", async () => {
     const { data } = await postJson("/api/build/compare", { baseId: buildId, targetId: targetBuildId });
     const weapon = data.items.rows.find((row) => row.key === "weapon1");

@@ -115,6 +115,35 @@ describe("DiffView", () => {
     expect(document.body.textContent).toContain("Lightning Arrow");
   });
 
+  it("renders enriched passive node names and stats grouped by type", () => {
+    const diff: BuildCompareResult = {
+      ...baseDiff,
+      passivesChanged: undefined,
+      passiveTree: {
+        addedNodeIds: ["52"],
+        removedNodeIds: ["55"],
+        sharedNodeCount: 1,
+        treeDataVersion: { version: "0_5", exact: true },
+        nodesToAllocate: {
+          named: 1,
+          total: 1,
+          groups: { keystone: [{ id: "52", name: "Zealot's Oath", type: "keystone", stats: ["Energy Shield does not Recharge"] }] },
+        },
+        nodesToRemove: {
+          named: 1,
+          total: 1,
+          groups: { notable: [{ id: "55", name: "Fast Acting Toxins", type: "notable", stats: ["Damaging Ailments deal damage 12% faster"] }] },
+        },
+      },
+    };
+    render(<DiffView diff={diff} />);
+    expect(document.body.textContent).toContain("Allocate (in the build to copy)");
+    expect(document.body.textContent).toContain("Zealot's Oath");
+    expect(document.body.textContent).toContain("Energy Shield does not Recharge");
+    expect(document.body.textContent).toContain("Fast Acting Toxins");
+    expect(document.body.textContent).toContain("Keystones (1)");
+  });
+
   it("renders the backend compare response shape", () => {
     const diff: BuildCompareResult = {
       base: { id: "base", label: "Mine" },
