@@ -96,9 +96,10 @@ async function run() {
     };
   }
 
+  const isWindows = process.platform === "win32";
   const child = spawn(
-    process.env.SHELL ?? process.comspec ?? "cmd.exe",
-    ["/c", `npx tsx src/index.ts`],
+    isWindows ? process.env.ComSpec ?? "cmd.exe" : process.env.SHELL ?? "/bin/sh",
+    isWindows ? ["/c", "npx tsx src/index.ts"] : ["-c", "npx tsx src/index.ts"],
     {
       cwd: MCP_DIR,
       stdio: ["pipe", "pipe", "inherit"],

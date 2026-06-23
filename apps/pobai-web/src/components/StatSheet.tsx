@@ -122,12 +122,14 @@ export function StatSheet({ diff }: { diff: BuildCompareResult }) {
 
   const dpsKey = useMemo(() => DPS_KEYS.find((k) => rowsByKey.has(k)), [rowsByKey]);
 
+  // Prefer the structured rows; fall back to legacy fields so older compare
+  // payloads still populate the scoreboard.
   const skillRows = diff.skills?.rows ?? [];
-  const skillsAdd = skillRows.filter((r) => r.status === "added").length;
-  const skillsDrop = skillRows.filter((r) => r.status === "removed").length;
-  const skillsTweak = skillRows.filter((r) => r.status === "changed").length;
-  const nodesAdd = diff.passiveTree?.addedNodeIds?.length ?? 0;
-  const nodesDrop = diff.passiveTree?.removedNodeIds?.length ?? 0;
+  const skillsAdd = skillRows.filter((r) => r.status === "added").length || (diff.skillsAdded?.length ?? 0);
+  const skillsDrop = skillRows.filter((r) => r.status === "removed").length || (diff.skillsRemoved?.length ?? 0);
+  const skillsTweak = skillRows.filter((r) => r.status === "changed").length || (diff.skillsChanged?.length ?? 0);
+  const nodesAdd = diff.passiveTree?.addedNodeIds?.length ?? diff.passivesChanged?.nodesAdded ?? diff.passivesChanged?.added?.length ?? 0;
+  const nodesDrop = diff.passiveTree?.removedNodeIds?.length ?? diff.passivesChanged?.nodesRemoved ?? diff.passivesChanged?.removed?.length ?? 0;
 
   const baseName = (diff.base as any)?.label ?? "My build";
   const targetName = (diff.target as any)?.label ?? "Target build";

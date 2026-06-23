@@ -22,7 +22,12 @@ function listVersions() {
     availableVersions = readdirSync(TREE_DIR)
       .filter((f) => f.endsWith(".json") && f !== "manifest.json")
       .map((f) => f.replace(/\.json$/, ""))
-      .sort();
+      // Numeric major_minor ordering so "0_10" sorts after "0_9" (not lexically).
+      .sort((a, b) => {
+        const [aMaj = 0, aMin = 0] = a.split("_").map((n) => Number(n) || 0);
+        const [bMaj = 0, bMin = 0] = b.split("_").map((n) => Number(n) || 0);
+        return aMaj - bMaj || aMin - bMin;
+      });
   } catch {
     availableVersions = [];
   }

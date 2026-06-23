@@ -173,7 +173,7 @@ async function applyPatch(content) {
   // Insert button block after closing paren of generateCodeOut
   const afterGenOut = result.slice(0, adjustedClosingParen + 1) + "\n" + BUTTON_BLOCK + result.slice(adjustedClosingParen + 1);
 
-  return { ok: true, content: result };
+  return { ok: true, content: afterGenOut };
 }
 
 // -------------------------------------------------------------------------

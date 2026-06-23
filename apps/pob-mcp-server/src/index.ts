@@ -412,7 +412,7 @@ server.tool(
   {},
   async () => {
     const data = await callBridge("export_build");
-    const error = bridgeError(data);
+    const error = bridgeError(data, { requireStats: true });
     if (error) {
       return {
         content: [{ type: "text", text: error }],

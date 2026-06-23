@@ -62,11 +62,15 @@ const IMPORTPAB_CONSTRUCTOR_HOOK = `
     -- [[ PoBAI Bridge: init ]] --
     _G.pobai_current_build = self.build
     if pobai_bridge_ensure_loaded() and _G.pobai_bridge and not _G.pobai_bridge_active then
-        _G.pobai_bridge:start()
-        _G.pobai_bridge_active = true
-        -- Schedule polling in the main loop
-        if main and main.schedule then
-            main:schedule(pobai_bridge_tick, 0)
+        local started = _G.pobai_bridge:start()
+        if started then
+            _G.pobai_bridge_active = true
+            -- Schedule polling in the main loop
+            if main and main.schedule then
+                main:schedule(pobai_bridge_tick, 0)
+            end
+        else
+            _G.pobai_bridge_active = false
         end
     end
     -- [[ /PoBAI Bridge ]] --

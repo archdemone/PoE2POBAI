@@ -102,6 +102,11 @@ function isItemMetaLine(line) {
   return ITEM_META_PREFIXES.some((prefix) => lower.startsWith(prefix));
 }
 
+// PoB item text uses "--------" rows as section separators; they're not data.
+function isDividerLine(line = "") {
+  return /^-+$/.test(line.trim());
+}
+
 // Strip PoB affix annotation tags like {crafted}, {tags:...}, {range:0.5} that
 // wrap a mod line, leaving the human-readable affix text.
 function cleanModLine(line) {
@@ -120,12 +125,13 @@ function parseItemBody(lines) {
   if (rarityMatch) {
     result.rarity = rarityMatch[1].trim();
     index = 1;
+    while (lines[index] && isDividerLine(lines[index])) index += 1;
     // For named items the next non-meta line is the name, then the base type.
-    if (lines[index] && !isItemMetaLine(lines[index])) {
+    if (lines[index] && !isItemMetaLine(lines[index]) && !isDividerLine(lines[index])) {
       result.name = lines[index];
       index += 1;
     }
-    if (lines[index] && !isItemMetaLine(lines[index]) && !/^[+-]/.test(lines[index])) {
+    if (lines[index] && !isItemMetaLine(lines[index]) && !isDividerLine(lines[index]) && !/^[+-]/.test(lines[index])) {
       result.typeLine = lines[index];
       index += 1;
     }
@@ -139,7 +145,7 @@ function parseItemBody(lines) {
     if (quality) { result.quality = quality[1]; continue; }
     const sockets = line.match(/^Sockets:\s*(.+)$/i);
     if (sockets) { result.sockets = sockets[1].trim(); continue; }
-    if (isItemMetaLine(line)) continue;
+    if (isItemMetaLine(line) || isDividerLine(line)) continue;
     // Only collect affixes once we've anchored on a "Rarity:" header line. Without
     // it (e.g. items stored as <Name>/<TypeLine> subtags) arbitrary lines aren't
     // affixes, so we leave `mods` empty rather than polluting it with the name.

@@ -1428,7 +1428,7 @@ async function handleApi(request, response, url) {
 
     const poe2McpStatus = poe2Mcp.ready
       ? `poe2-mcp is CONNECTED with ${poe2Mcp.tools.length} live game tools: ${poe2Mcp.toolNames.slice(0, 8).join(", ")}...`
-      : "poe2-mcp is NOT connected (pip install poe2-mcp needed). You only have the 6 local PoB parse tools.";
+      : `poe2-mcp is NOT connected (pip install poe2-mcp needed). You have the local PoB parse tools${pob2BridgeConnected ? " plus the live PoB2 bridge tools" : ""}.`;
 
     const pob2BridgeStatus = pob2BridgeConnected
       ? "PoB2 bridge is CONNECTED — you can read live DPS/eHP from PoB2 and test modifications."
@@ -1439,6 +1439,10 @@ async function handleApi(request, response, url) {
       "",
       `Tool status: ${poe2McpStatus}`,
       `PoB2 bridge: ${pob2BridgeStatus}`,
+      "",
+      body.snapshotId
+        ? `Selected build: the user's active build snapshot_id is "${body.snapshotId}". Use this id for any tool needing snapshot_id unless the user clearly refers to a different build.`
+        : "No build is currently selected — call list_builds to discover available snapshot ids before using build tools.",
       "",
       "## Workflow for EVERY new conversation:",
       "1. Call get_build_summary(snapshot_id) first to load the player's build. The snapshot_id comes from the user context or list_builds.",

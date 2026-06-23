@@ -984,9 +984,12 @@ a { color: #f0c56c; }
 
 @media (max-width: 560px) {
   .chat-input-area,
-  .compare-controls,
-  .compare-builds {
+  .compare-controls {
     grid-template-columns: 1fr;
+  }
+
+  .compare-builds {
+    flex-direction: column;
   }
 
   .compare-header,
@@ -1076,8 +1079,8 @@ a { color: #f0c56c; }
 .cmp-resok { color: var(--cmp-good) !important; }
 .cmp-resbad { color: var(--cmp-bad) !important; }
 
-.cmp-ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; color: var(--cmp-gold); }
-.cmp-ic .cmp-fill { fill: currentColor; stroke: none; }
+.cmp-ic { width: 16px; height: 16px; fill: none; stroke: currentcolor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; color: var(--cmp-gold); }
+.cmp-ic .cmp-fill { fill: currentcolor; stroke: none; }
 
 @media (max-width: 720px) {
   .cmp-tiles { grid-template-columns: 1fr 1fr; }

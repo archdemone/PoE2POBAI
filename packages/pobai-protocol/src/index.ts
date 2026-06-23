@@ -30,6 +30,10 @@ export interface ParsedItem {
   name?: string;
   typeLine?: string;
   rarity?: string;
+  itemLevel?: string;
+  quality?: string;
+  sockets?: string;
+  mods?: string[];
 }
 
 export interface ParsedPassiveTree {
@@ -37,6 +41,7 @@ export interface ParsedPassiveTree {
   treeVersion?: string;
   allocatedNodeCount?: number;
   allocatedNodeIds?: string[];
+  masteryEffects?: Array<{ node: string; effect: string }>;
 }
 
 export interface BuildSummary {
@@ -46,6 +51,8 @@ export interface BuildSummary {
   items: ParsedItem[];
   passiveTree: ParsedPassiveTree;
   defenses: Record<string, string>;
+  /** Full numeric stat sheet (attributes, life, resists, defences, offence). */
+  stats?: Record<string, string | number>;
   detectedTerms: string[];
   warnings: string[];
   resolvedFrom?: string;
@@ -62,14 +69,15 @@ export interface BuildSnapshot {
   summary?: BuildSummary;
 }
 
-export interface ImportBuildRequest {
+/** Canonical import payload. Either `payload` or the deprecated `code` is required. */
+type ImportBuildPayload =
+  | { payload: string; code?: never }
+  | { payload?: never; /** @deprecated Use payload. */ code: string };
+
+export type ImportBuildRequest = {
   source: BuildImportSource;
   label?: string;
-  /** Canonical import payload. Either payload or deprecated code is required. */
-  payload?: string;
-  /** @deprecated Use payload. Accepted only for older browser builds. */
-  code?: string;
-}
+} & ImportBuildPayload;
 
 export interface ImportBuildResponse {
   snapshot: BuildSnapshot;

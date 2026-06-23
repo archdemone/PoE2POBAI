@@ -248,10 +248,10 @@ function pobai_poll_listener()
     client:settimeout(2)  -- 2s timeout for receiving the request
 
     -- Read the HTTP request (up to 64KB)
-    local ok_req, request_data = pcall(function()
+    local ok_req, request_line = pcall(function()
         return client:receive("*l")  -- read the request line
     end)
-    if not ok_req then
+    if not ok_req or not request_line then
         client:close()
         return
     end
@@ -262,7 +262,7 @@ function pobai_poll_listener()
         local ok_hdr, line = pcall(function()
             return client:receive("*l")
         end)
-        if not ok_hdr or line == "" then break end
+        if not ok_hdr or line == nil or line == "" then break end
         table.insert(headers, line)
     end
 
