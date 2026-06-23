@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Compare — Hybrid + Full Character Stats (Mockup 5)</title>
+<style>
+  :root{
+    --bg:#0e1015; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --text:#e7e9ee; --muted:#8b93a7; --gold:#c8aa6e;
+    --mine:#5aa9e6; --theirs:#c8aa6e;
+    --good:#54d98c; --good-bg:#13301f; --bad:#f0616d; --bad-bg:#34161a;
+    --warn:#f4c152; --warn-bg:#3a2f12;
+    --str:#e06a5a; --dex:#69c779; --int:#5aa9e6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1a1f2b,var(--bg));color:var(--text);
+    font:15px/1.45 "Segoe UI",system-ui,sans-serif;padding:28px 20px 70px}
+  .wrap{max-width:1120px;margin:0 auto}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+  .topbar h1{font-size:18px;margin:0;font-weight:600}
+  .topbar .tag{color:var(--muted);font-size:12px}
+
+  /* identity */
+  .ids{display:grid;grid-template-columns:1fr 56px 1fr;align-items:stretch;margin-bottom:16px}
+  .idcard{background:var(--panel);border:1px solid var(--line);padding:14px 18px}
+  .idcard.left{border-radius:12px 0 0 12px;border-right:none;border-top:2px solid var(--mine)}
+  .idcard.right{border-radius:0 12px 12px 0;border-left:none;text-align:right;border-top:2px solid var(--theirs)}
+  .idcard .role{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted)}
+  .idcard .name{font-size:19px;font-weight:700;margin:2px 0}
+  .idcard.left .name{color:var(--mine)} .idcard.right .name{color:var(--theirs)}
+  .idcard .sub{color:var(--muted);font-size:13px}
+  .vs{display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--line);color:var(--gold);font-weight:700;font-size:12px}
+
+  /* scoreboard */
+  .score{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:22px}
+  .sc{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center}
+  .sc .big{font-size:23px;font-weight:800}
+  .sc .lab{color:var(--muted);font-size:11.5px;margin-top:2px}
+  .sc.add .big{color:var(--good)} .sc.rem .big{color:var(--bad)} .sc.chg .big{color:var(--warn)}
+  .sc.node .big{color:var(--gold)} .sc.lvl .big{color:var(--text)}
+
+  .layout{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;align-items:start}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .panel h2{font-size:13px;text-transform:uppercase;letter-spacing:1.2px;color:var(--gold);margin:0 0 4px;display:flex;align-items:center;gap:8px}
+  .panel h2 .n{margin-left:auto;font-size:12px;letter-spacing:0;text-transform:none;color:var(--muted)}
+
+  /* column key over the stat table */
+  .colkey{display:grid;grid-template-columns:1.2fr 1fr 70px 1fr;gap:8px;padding:10px 4px 6px;font-size:10px;
+    text-transform:uppercase;letter-spacing:.6px;color:var(--muted);border-bottom:1px solid var(--line);margin-bottom:6px}
+  .colkey .c2,.colkey .c4{text-align:center}
+  .colkey .c3{text-align:center}
+  .colkey b.m{color:var(--mine)} .colkey b.t{color:var(--theirs)}
+
+  .grp{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:14px 0 6px;font-weight:700}
+  .grp:first-of-type{margin-top:4px}
+
+  .srow{display:grid;grid-template-columns:1.2fr 1fr 70px 1fr;gap:8px;align-items:center;padding:5px 4px;border-radius:7px}
+  .srow:hover{background:var(--panel2)}
+  .sname{color:var(--muted);font-size:13px}
+  .sname .att{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;vertical-align:0}
+  .v{display:flex;flex-direction:column;gap:4px}
+  .v .num{font-weight:700;font-size:15px;text-align:center}
+  .v.r .num{text-align:center}
+  .track{height:4px;background:#0c0e12;border-radius:3px;overflow:hidden;border:1px solid #20242d}
+  .fill{height:100%}
+  .fill.m{background:linear-gradient(90deg,#2f6f9e,var(--mine))}
+  .fill.t{background:linear-gradient(90deg,#8a7338,var(--theirs))}
+  .win{outline:1px solid rgba(84,217,140,.5);background:rgba(84,217,140,.07);border-radius:7px}
+  .lead{font-size:9px;color:var(--good);text-transform:uppercase;letter-spacing:.5px;display:block;text-align:center;margin-top:2px}
+  .delta{display:flex;align-items:center;justify-content:center}
+  .dpill{font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:20px;white-space:nowrap}
+  .up{color:var(--good);background:var(--good-bg)} .down{color:var(--bad);background:var(--bad-bg)} .eq{color:var(--muted);background:#20242d}
+  .cap{color:var(--bad);font-size:10px;margin-left:5px}
+  .ok{color:var(--good)}
+
+  /* checklist panel */
+  .chk-h{display:flex;align-items:center;gap:8px;margin:14px 0 8px;font-size:12px;font-weight:700}
+  .chk-h .ic{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}
+  .ic.add{background:var(--good-bg);color:var(--good)} .ic.rem{background:var(--bad-bg);color:var(--bad)} .ic.up{background:var(--warn-bg);color:var(--warn)}
+  .chk-h .n{margin-left:auto;color:var(--muted);font-weight:500}
+  .task{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--line);border-left-width:3px;border-radius:7px;padding:8px 11px;margin-bottom:5px;font-size:13.5px}
+  .task.add{border-left-color:var(--good)} .task.rem{border-left-color:var(--bad)} .task.up{border-left-color:var(--warn)}
+  .task .box{width:15px;height:15px;border-radius:4px;border:2px solid var(--line);flex:none}
+  .task .lbl{font-weight:600}
+  .task .meta{margin-left:auto;color:var(--muted);font-size:11.5px}
+  .more{color:var(--muted);font-size:12px;text-align:center;padding:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar"><h1>Build Comparison — Hybrid</h1><span class="tag">Mockup 5 · Scoreboard + full character sheet + swap checklist</span></div>
+
+  <div class="ids">
+    <div class="idcard left"><div class="role">My build</div><div class="name">Dconnic_Monka</div><div class="sub">Monk · Martial Artist · Level 91</div></div>
+    <div class="vs">VS</div>
+    <div class="idcard right"><div class="role">Build to copy</div><div class="name">Target Guide</div><div class="sub">Monk · Martial Artist · Level 96</div></div>
+  </div>
+
+  <div class="score">
+    <div class="sc lvl"><div class="big">+5</div><div class="lab">levels behind</div></div>
+    <div class="sc add"><div class="big">1</div><div class="lab">skills to add</div></div>
+    <div class="sc rem"><div class="big">1</div><div class="lab">skills to drop</div></div>
+    <div class="sc chg"><div class="big">10</div><div class="lab">gem tweaks</div></div>
+    <div class="sc node"><div class="big">+18</div><div class="lab">passive nodes</div></div>
+  </div>
+
+  <div class="layout">
+    <!-- LEFT: full character sheet -->
+    <div class="panel">
+      <h2>Character stats <span class="n">17 differ · 4 matched</span></h2>
+      <div class="colkey">
+        <span>Stat</span>
+        <span class="c2"><b class="m">My build</b></span>
+        <span class="c3">Δ</span>
+        <span class="c4"><b class="t">Target</b></span>
+      </div>
+
+      <div class="grp">Attributes</div>
+      <div class="srow">
+        <div class="sname"><span class="att" style="background:var(--str)"></span>Strength</div>
+        <div class="v"><div class="num">182</div><div class="track"><div class="fill m" style="width:86%"></div></div></div>
+        <div class="delta"><span class="dpill up">+29</span></div>
+        <div class="v r win"><div class="num">211</div><div class="track"><div class="fill t" style="width:100%"></div></div><span class="lead">ahead</span></div>
+      </div>
+      <div class="srow">
+        <div class="sname"><span class="att" style="background:var(--dex)"></span>Dexterity</div>
+        <div class="v"><div class="num">240</div><div class="track"><div class="fill m" style="width:100%"></div></div></div>
+        <div class="delta"><span class="dpill down">−14</span></div>
+        <div class="v r"><div class="num">226</div><div class="track"><div class="fill t" style="width:94%"></div></div></div>
+      </div>
+      <div class="srow">
+        <div class="sname"><span class="att" style="background:var(--int)"></span>Intelligence</div>
+        <div class="v"><div class="num">98</div><div class="track"><div class="fill m" style="width:79%"></div></div></div>
+        <div class="delta"><span class="dpill up">+26</span></div>
+        <div class="v r win"><div class="num">124</div><div class="track"><div class="fill t" style="width:100%"></div></div><span class="lead">ahead</span></div>
+      </div>
+
+      <div class="grp">Life &amp; resources</div>
+      <div class="srow">
+        <div class="sname">Life</div>
+        <div class="v"><div class="num">3,200</div><div class="track"><div class="fill m" style="width:83%"></div></div></div>
+        <div class="delta"><span class="dpill up">+650</span></div>
+        <div class="v r win"><div class="num">3,850</div><div class="track"><div class="fill t" style="width:100%"></div></div><span class="lead">ahead</span></div>
+      </div>
+      <div class="srow">
+        <div class="sname">Energy Shield</div>
+        <div class="v"><div class="num">1,100</div><div class="track"><div class="fill m" style="width:78%"></div></div></div>
+        <div class="delta"><span class="dpill up">+300</span></div>
+        <div class="v r win"><div class="num">1,400</div><div class="track"><div class="fill t" style="width:100%"></div></div><span class="lead">ahead</span></div>
+      </div>
+      <div class="srow">
+        <div class="sname">Mana</div>
+        <div class="v"><div class="num">612</div><div class="track"><div class="fill m" style="width:100%"></div></div></div>
+        <div class="delta"><span class="dpill eq">=</span></div>
+        <div class="v r"><div class="num">612</div><div class="track"><div class="fill t" style="width:100%"></div></div></div>
+      </div>
+      <div class="srow">
+        <div class="sname">Spirit</div>
+        <div class="v"><div class="num">100</div><div class="track"><div class="fill m" style="width:67%"></div></div></div>
+        <div class="delta"><span class="dpill up">+50</span></div>
+        <div class="v r win"><div class="num">150</div><div class="track"><div class="fill t" style="width:100%"></div></div><span class="lead">ahead</span></div>
+      </div>
+
+      <div class="grp">Resistances <span style="color:#5b6373;text-transform:none;letter-spacing:0;font-weight:400">(cap 75%)</span></div>
+      <div class="srow">
+        <div class="sname">Fire</div>
+        <div class="v"><div class="num ok">75%</div></div>
+        <div class="delta"><span class="dpill eq">=</span></div>
+        <div class="v r"><div class="num ok">75%</div></div>
+      </div>
+      <div class="srow">
+        <div class="sname">Cold</div>
+        <div class="v"><div class="num" style="color:var(--bad)">68%<span class="cap">▲ uncapped</span></div></div>
+        <div class="delta"><span class="dpill up">+7</span></div>
+        <div class="v r win"><div class="num ok">75%</div><span class="lead">capped</span></div>
+      </div>
+      <div class="srow">
+        <div class="sname">Lightning</div>
+        <div class="v"><div class="num ok">75%</div></div>
+        <div class="delta"><span class="dpill eq">=</span></div>
+        <div class="v r"><div class="num ok">75%</div></div>
+      </div>
+      <div class="srow">
+        <div class="sname">Chaos</div>
+        <div class="v"><div class="num" style="color:var(--bad)">−12%</div></div>
+        <div class="delta"><span class="dpill up">+34</span></div>
+        <div class="v r win"><div class="num ok">+22%</div><span class="lead">ahead</span></div>
+      </div>
+
+      <div class="grp">Defences</div>
+      <div class="srow">
+        <div class="sname">Armour</div>
+        <div class="v"><div class="num">8,420</div><div class="track"><div class="fill m" style="width:74%"></div></div></div>
+        <div class="delta"><span class="dpill up">+3.0k</span></div>
+        <div class="v r win"><div class="num">11,400</div><div class="track"><div class="fill t" style="width:100%"></div></div><span class="lead">ahead</span></div>
+      </div>
+      <div class="srow">
+        <div class="sname">Evasion</div>
+        <div class="v"><div class="num">14,900</div><div class="track"><div class="fill m" style="width:100%"></div></div></div>
+        <div class="delta"><span class="dpill down">−1.2k</span></div>
+        <div class="v r"><div class="num">13,700</div><div class="track"><div class="fill t" style="width:92%"></div></div></div>
+      </div>
+      <div class="srow">
+        <div class="sname">Block</div>
+        <div class="v"><div class="num">25%</div><div class="track"><div class="fill m" style="width:71%"></div></div></div>
+        <div class="delta"><span class="dpill up">+10</span></div>
+        <div class="v r win"><div class="num">35%</div><div class="track"><div class="fill t" style="width:100%"></div></div><span class="lead">ahead</span></div>
+      </div>
+      <div class="srow">
+        <div class="sname">Phys Dmg Reduction</div>
+        <div class="v"><div class="num">42%</div><div class="track"><div class="fill m" style="width:79%"></div></div></div>
+        <div class="delta"><span class="dpill up">+11</span></div>
+        <div class="v r win"><div class="num">53%</div><div class="track"><div class="fill t" style="width:100%"></div></div><span class="lead">ahead</span></div>
+      </div>
+      <div class="srow">
+        <div class="sname">Spell Block</div>
+        <div class="v"><div class="num">10%</div><div class="track"><div class="fill m" style="width:40%"></div></div></div>
+        <div class="delta"><span class="dpill up">+15</span></div>
+        <div class="v r win"><div class="num">25%</div><div class="track"><div class="fill t" style="width:100%"></div></div><span class="lead">ahead</span></div>
+      </div>
+
+      <div class="grp">Offence</div>
+      <div class="srow">
+        <div class="sname">Total DPS</div>
+        <div class="v"><div class="num">1.20M</div><div class="track"><div class="fill m" style="width:67%"></div></div></div>
+        <div class="delta"><span class="dpill up">+50%</span></div>
+        <div class="v r win"><div class="num">1.80M</div><div class="track"><div class="fill t" style="width:100%"></div></div><span class="lead">ahead</span></div>
+      </div>
+      <div class="srow">
+        <div class="sname">Crit Chance</div>
+        <div class="v"><div class="num">42%</div><div class="track"><div class="fill m" style="width:82%"></div></div></div>
+        <div class="delta"><span class="dpill up">+9</span></div>
+        <div class="v r win"><div class="num">51%</div><div class="track"><div class="fill t" style="width:100%"></div></div><span class="lead">ahead</span></div>
+      </div>
+      <div class="srow">
+        <div class="sname">Crit Multiplier</div>
+        <div class="v"><div class="num">312%</div><div class="track"><div class="fill m" style="width:90%"></div></div></div>
+        <div class="delta"><span class="dpill up">+34</span></div>
+        <div class="v r win"><div class="num">346%</div><div class="track"><div class="fill t" style="width:100%"></div></div><span class="lead">ahead</span></div>
+      </div>
+      <div class="srow">
+        <div class="sname">Attack Speed</div>
+        <div class="v"><div class="num">4.10</div><div class="track"><div class="fill m" style="width:87%"></div></div></div>
+        <div class="delta"><span class="dpill up">+0.6</span></div>
+        <div class="v r win"><div class="num">4.70</div><div class="track"><div class="fill t" style="width:100%"></div></div><span class="lead">ahead</span></div>
+      </div>
+      <div class="srow">
+        <div class="sname">Accuracy</div>
+        <div class="v"><div class="num">92%</div><div class="track"><div class="fill m" style="width:100%"></div></div></div>
+        <div class="delta"><span class="dpill eq">=</span></div>
+        <div class="v r"><div class="num">92%</div><div class="track"><div class="fill t" style="width:100%"></div></div></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: swap checklist -->
+    <div class="panel">
+      <h2>Swap checklist <span class="n">0 / 12 done</span></h2>
+
+      <div class="chk-h"><span class="ic add">+</span>Add to my build<span class="n">1 skill · 18 nodes</span></div>
+      <div class="task add"><span class="box"></span><span class="lbl">Refutation</span><span class="meta">new group</span></div>
+      <div class="task add"><span class="box"></span><span class="lbl">Allocate 18 passives</span><span class="meta">+18 pts</span></div>
+
+      <div class="chk-h"><span class="ic rem">−</span>Remove from my build<span class="n">1 skill · 3 nodes</span></div>
+      <div class="task rem"><span class="box"></span><span class="lbl">Mace Strike</span><span class="meta">drop group</span></div>
+      <div class="task rem"><span class="box"></span><span class="lbl">Refund 3 passives</span><span class="meta">−3 pts</span></div>
+
+      <div class="chk-h"><span class="ic up">↑</span>Tweak gems<span class="n">10 groups</span></div>
+      <div class="task up"><span class="box"></span><span class="lbl">Wind Dancer</span><span class="meta">6 → 3 gems</span></div>
+      <div class="task up"><span class="box"></span><span class="lbl">Blasphemy</span><span class="meta">+Magnified Area</span></div>
+      <div class="task up"><span class="box"></span><span class="lbl">Spirit Vessel</span><span class="meta">2 changes</span></div>
+      <div class="task up"><span class="box"></span><span class="lbl">Skeletal Storm Mage</span><span class="meta">+2 levels</span></div>
+      <div class="more">+ 6 more minor gem tweaks…</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
