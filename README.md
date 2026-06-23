@@ -71,7 +71,7 @@ npx tsx apps/pob-mcp-server/src/index.ts
 npm run test --workspace apps/pob-mcp-server
 ```
 
-39 MCP-server tests cover XML parsing, PoB code decompression, item/skill/defense extraction, snapshot CRUD, bridge handoff contracts, and disk persistence.
+The MCP-server tests cover XML parsing, PoB code decompression, item/skill/defense extraction, snapshot CRUD, bridge handoff contracts, and disk persistence.
 
 ## Web UI companion (optional)
 
