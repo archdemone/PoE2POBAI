@@ -22,6 +22,9 @@ const webRoot = existsSync(join(docsRoot, "index.html"))
   ? docsRoot
   : resolve(fileURLToPath(new URL("../../pobai-web", import.meta.url)));
 const dataRoot = resolve(process.env.POBAI_DATA_DIR ?? fileURLToPath(new URL("../../../data/snapshots", import.meta.url)));
+const defaultBuildsPath = resolve(
+  process.env.POBAI_DEFAULT_BUILDS_PATH ?? fileURLToPath(new URL("../../../config/default-builds.json", import.meta.url))
+);
 const snapshots = new Map();
 const payloads = new Map();
 
@@ -74,6 +77,95 @@ async function deleteSnapshot(snapshotId) {
     } catch (error) {
       if (error?.code !== "ENOENT") throw error;
     }
+  }
+}
+
+function createSnapshotFromXml({ source, label, xml, note }) {
+  const hash = createHash("sha256").update(xml).digest("hex");
+  const summary = parseBuild(xml).summary;
+  if (note) summary.resolvedFrom = note;
+  return {
+    id: randomUUID(),
+    source,
+    createdAt: new Date().toISOString(),
+    label: label?.trim() || `${source} snapshot ${new Date().toISOString()}`,
+    hash,
+    sizeBytes: Buffer.byteLength(xml, "utf8"),
+    preview: xml.slice(0, 240),
+    summary,
+  };
+}
+
+async function resolveSnapshotFromPayload({ source, label, payload, mcp = poe2Mcp }) {
+  const rawPayload = payload.replace(/\r\n/g, "\n").trim();
+  const resolved = await resolveToXml(rawPayload, { mcp });
+  const xml = resolved.xml;
+  const snapshot = createSnapshotFromXml({ source, label, xml, note: resolved.note });
+  return { snapshot, xml };
+}
+
+async function storeSnapshot(snapshot, xml) {
+  snapshots.set(snapshot.id, snapshot);
+  payloads.set(snapshot.id, xml);
+  await persistSnapshot(snapshot, xml);
+}
+
+function findSnapshotByHash(hash) {
+  for (const snap of snapshots.values()) {
+    if (snap.hash === hash) return snap;
+  }
+  return undefined;
+}
+
+async function createSnapshotFromPayload({ source, label, payload, mcp = poe2Mcp }) {
+  const { snapshot, xml } = await resolveSnapshotFromPayload({ source, label, payload, mcp });
+  // Dedup by build content: re-importing the same code (same XML hash) brings the
+  // existing profile back up instead of piling up duplicate snapshots. Importing a
+  // different code still creates a new build, so the compare target stays changeable.
+  const existing = findSnapshotByHash(snapshot.hash);
+  if (existing) return existing;
+  await storeSnapshot(snapshot, xml);
+  return snapshot;
+}
+
+async function seedDefaultBuilds() {
+  if (process.env.POBAI_SEED_DEFAULT_BUILDS === "0") return;
+  if (snapshots.size > 0 || !existsSync(defaultBuildsPath)) return;
+
+  let config;
+  try {
+    config = JSON.parse(await readFile(defaultBuildsPath, "utf8"));
+  } catch (error) {
+    console.warn(`Skipping default builds: ${error instanceof Error ? error.message : error}`);
+    return;
+  }
+
+  if (!Array.isArray(config?.builds)) {
+    console.warn("Skipping default builds: config must contain a builds array.");
+    return;
+  }
+
+  const defaults = [];
+  for (const [index, build] of config.builds.entries()) {
+    const source = build?.source;
+    const payload = typeof build?.payload === "string" ? build.payload : build?.code;
+    const label = typeof build?.label === "string" ? build.label : undefined;
+    if (typeof source !== "string" || typeof payload !== "string" || payload.trim().length === 0) {
+      console.warn(`Skipping default builds: build ${index + 1} requires source and code/payload.`);
+      return;
+    }
+
+    try {
+      defaults.push(await resolveSnapshotFromPayload({ source, label, payload, mcp: null }));
+    } catch (error) {
+      console.warn(`Skipping default builds: ${label ?? `build ${index + 1}`} failed to import: ${error instanceof Error ? error.message : error}`);
+      return;
+    }
+  }
+
+  for (const { snapshot, xml } of defaults) {
+    await storeSnapshot(snapshot, xml);
+    console.log(`Seeded default build "${snapshot.label}".`);
   }
 }
 
@@ -430,14 +522,20 @@ function signature(value) {
 
 function indexCollection(items, keyFn, simplifyFn) {
   const indexed = new Map();
+  const occurrences = new Map();
   items.forEach((item, index) => {
-    const key = keyFn(item, index);
+    const baseKey = keyFn(item, index);
+    // Disambiguate genuine duplicates (e.g. two "Purity of Fire" groups — a main
+    // setup plus a weapon-swap copy) so the second doesn't overwrite the first.
+    const seen = occurrences.get(baseKey) ?? 0;
+    occurrences.set(baseKey, seen + 1);
+    const key = seen === 0 ? baseKey : `${baseKey}#${seen + 1}`;
     indexed.set(key, { key, value: simplifyFn(item), index });
   });
   return indexed;
 }
 
-function compareCollection(baseItems = [], targetItems = [], keyFn, simplifyFn) {
+function compareCollection(baseItems = [], targetItems = [], keyFn, simplifyFn, signatureFn = signature) {
   const baseByKey = indexCollection(baseItems, keyFn, simplifyFn);
   const targetByKey = indexCollection(targetItems, keyFn, simplifyFn);
   const rows = [...new Set([...baseByKey.keys(), ...targetByKey.keys()])]
@@ -448,15 +546,35 @@ function compareCollection(baseItems = [], targetItems = [], keyFn, simplifyFn) 
       let status = "unchanged";
       if (!base) status = "added";
       else if (!target) status = "removed";
-      else if (signature(base) !== signature(target)) status = "changed";
+      else if (signatureFn(base) !== signatureFn(target)) status = "changed";
       return { key, status, changed: status !== "unchanged", base, target };
     });
 
   return { rows, counts: countStatuses(rows), changed: rows.some((row) => row.changed) };
 }
 
+// Skills are matched by the skill itself (its label / main gem), NOT by socket
+// slot — PoB stores groups in an arbitrary slot order that differs between
+// exports, so slot-keying makes identical builds look like everything changed.
 function skillCompareKey(skill, index) {
-  return normalizeCompareKey(skill?.id || skill?.label || skill?.mainActiveSkill || skill?.gems?.[0]?.name || `skill-${index + 1}`);
+  return normalizeCompareKey(skill?.label || skill?.mainActiveSkill || skill?.gems?.[0]?.name || skill?.id || `skill-${index + 1}`);
+}
+
+// Compare two skill groups on what actually matters for copying a build — the set
+// of gems and their levels/quality — independent of slot and gem ordering. This
+// keeps a reordered-but-identical group reading as "unchanged" rather than
+// "changed", while still flagging real gem add/remove/relevel differences.
+function skillSignature(skill) {
+  const gems = (skill?.gems ?? [])
+    .map((gem) => ({
+      name: normalizeCompareKey(gem?.name || ""),
+      level: gem?.level ?? "",
+      quality: gem?.quality ?? "",
+      enabled: gem?.enabled ?? "",
+      support: gem?.support ?? "",
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return JSON.stringify({ label: normalizeCompareKey(skill?.label || ""), enabled: skill?.enabled ?? "", gems });
 }
 
 function itemCompareKey(item, index) {
@@ -538,8 +656,11 @@ function compareSnapshots(baseSnapshot, targetSnapshot) {
     higherIsBetter: true,
   });
   const passiveTree = comparePassiveTree(baseSnapshot.summary?.passiveTree, targetSnapshot.summary?.passiveTree);
-  const skills = enrichSkillRows(compareCollection(baseSnapshot.summary?.skills, targetSnapshot.summary?.skills, skillCompareKey, simplifySkill));
+  const skills = enrichSkillRows(compareCollection(baseSnapshot.summary?.skills, targetSnapshot.summary?.skills, skillCompareKey, simplifySkill, skillSignature));
   const items = enrichItemRows(compareCollection(baseSnapshot.summary?.items, targetSnapshot.summary?.items, itemCompareKey, simplifyItem));
+  // Full character sheet (attributes, life, resists, defences, offence). The UI
+  // curates which keys to surface; here we just expose the whole compared set.
+  const stats = compareRecord(baseSnapshot.summary?.stats, targetSnapshot.summary?.stats, { category: "stat", higherIsBetter: true });
 
   return {
     base: snapshotMetadata(baseSnapshot),
@@ -549,6 +670,7 @@ function compareSnapshots(baseSnapshot, targetSnapshot) {
     items,
     passiveTree,
     defenses: { stats: defenses.rows, counts: defenses.counts, changed: defenses.changed },
+    stats: { rows: stats.rows, counts: stats.counts, changed: stats.changed },
     statDiffs: defenses.rows,
   };
 }
@@ -1237,10 +1359,13 @@ async function handleApi(request, response, url) {
     }
 
     const importPayload = typeof body.payload === "string" ? body.payload : body.code;
-    const rawPayload = importPayload.replace(/\r\n/g, "\n").trim();
-    let resolved;
+    let snapshot;
     try {
-      resolved = await resolveToXml(rawPayload, { mcp: poe2Mcp });
+      snapshot = await createSnapshotFromPayload({
+        source: body.source,
+        label: body.label,
+        payload: importPayload,
+      });
     } catch (err) {
       if (err instanceof ImportError) {
         sendJson(response, 422, { error: err.message });
@@ -1250,24 +1375,6 @@ async function handleApi(request, response, url) {
       return;
     }
 
-    const xml = resolved.xml;
-    const hash = createHash("sha256").update(xml).digest("hex");
-    const summary = parseBuild(xml).summary;
-    if (resolved.note) summary.resolvedFrom = resolved.note;
-    const snapshot = {
-      id: randomUUID(),
-      source: body.source,
-      createdAt: new Date().toISOString(),
-      label: body.label?.trim() || `${body.source} snapshot ${new Date().toISOString()}`,
-      hash,
-      sizeBytes: Buffer.byteLength(xml, "utf8"),
-      preview: xml.slice(0, 240),
-      summary,
-    };
-
-    snapshots.set(snapshot.id, snapshot);
-    payloads.set(snapshot.id, xml);
-    await persistSnapshot(snapshot, xml);
     sendJson(response, 201, { snapshot });
     return;
   }
@@ -1461,6 +1568,7 @@ const server = createServer(async (request, response) => {
 });
 
 await loadSnapshotsFromDisk();
+await seedDefaultBuilds();
 
 server.listen(port, host, async () => {
   console.log(`pobai-server listening on http://${host}:${port}`);

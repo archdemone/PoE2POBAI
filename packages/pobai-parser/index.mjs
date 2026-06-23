@@ -180,6 +180,10 @@ export function parseBuildXml(xml) {
     items: [],
     passiveTree: {},
     defenses: {},
+    // Full numeric stat sheet (attributes, life, resists, defences, offence...).
+    // `defenses` stays a curated subset for the chat tools; `stats` carries
+    // everything PoB exported so the compare UI can build a full character sheet.
+    stats: {},
     detectedTerms: [],
     warnings,
   };
@@ -203,8 +207,9 @@ export function parseBuildXml(xml) {
     const key = String(stat["stat"] || stat["name"] || stat["id"] || "").toLowerCase();
     const value = compact(stat["value"] || stat["val"] || stat["total"] || stat["amount"]);
     if (!key || value === undefined) continue;
+    const rawKey = stat["stat"] || stat["name"] || stat["id"] || key;
+    summary.stats[rawKey] = value;
     if (DEFENSE_KEYS.some((dk) => key.includes(dk))) {
-      const rawKey = stat["stat"] || stat["name"] || stat["id"] || key;
       summary.defenses[rawKey] = value;
     }
   }

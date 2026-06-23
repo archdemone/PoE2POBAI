@@ -55,6 +55,7 @@ beforeAll(async () => {
       ...process.env,
       POBAI_SERVER_PORT: String(pobaiPort),
       POBAI_DATA_DIR: dataDir,
+      POBAI_SEED_DEFAULT_BUILDS: "0",
       POE2_MCP_DISABLED: "1",
     },
     stdio: "pipe",
@@ -315,5 +316,55 @@ describe("REST tool endpoints", () => {
     expect(res.status).toBe(201);
     expect(data.snapshot.summary.character.name).toBe("LegacyImport");
     await fetch(`http://localhost:${pobaiPort}/api/build/${data.snapshot.id}`, { method: "DELETE" });
+  });
+
+  it("POST /api/build/import dedups identical builds instead of creating duplicates", async () => {
+    const dedupXml = `<PathOfBuilding2>
+      <Build characterName="DedupMonk" className="Monk" ascendClassName="Martial Artist" level="96" />
+      <PlayerStat stat="Life" value="4200" />
+    </PathOfBuilding2>`;
+
+    const first = await postJson("/api/build/import", { source: "pob-xml", label: "Dedup Build", payload: dedupXml });
+    expect(first.res.status).toBe(201);
+
+    // Re-importing the exact same build returns the SAME snapshot id...
+    const second = await postJson("/api/build/import", { source: "pob-xml", label: "Dedup Build Again", payload: dedupXml });
+    expect(second.data.snapshot.id).toBe(first.data.snapshot.id);
+
+    // ...and the build list contains only one entry for that build.
+    const list = await (await fetch(`http://localhost:${pobaiPort}/api/builds`)).json();
+    const matches = list.filter((b) => b.snapshot_id === first.data.snapshot.id);
+    expect(matches.length).toBe(1);
+
+    await fetch(`http://localhost:${pobaiPort}/api/build/${first.data.snapshot.id}`, { method: "DELETE" });
+  });
+
+  it("matches skills by identity, not socket slot, so reordered groups aren't false diffs", async () => {
+    // Same two skills, opposite slot order between the builds, plus the gems within
+    // a group reordered. Slot-keyed comparison would report everything as
+    // added/removed/changed; identity matching must see them as the same.
+    const left = `<PathOfBuilding2>
+      <Build characterName="OrderA" className="Monk" ascendClassName="Martial Artist" level="96" />
+      <Skill slot="1" label="Ice Strike" enabled="true"><Gem nameSpec="Ice Strike" level="20" quality="20" enabled="true" /><Gem nameSpec="Martial Tempo" level="20" support="true" enabled="true" /></Skill>
+      <Skill slot="2" label="Tempest Flurry" enabled="true"><Gem nameSpec="Tempest Flurry" level="20" quality="20" enabled="true" /></Skill>
+    </PathOfBuilding2>`;
+    const right = `<PathOfBuilding2>
+      <Build characterName="OrderB" className="Monk" ascendClassName="Martial Artist" level="96" />
+      <Skill slot="1" label="Tempest Flurry" enabled="true"><Gem nameSpec="Tempest Flurry" level="20" quality="20" enabled="true" /></Skill>
+      <Skill slot="2" label="Ice Strike" enabled="true"><Gem nameSpec="Martial Tempo" level="20" support="true" enabled="true" /><Gem nameSpec="Ice Strike" level="20" quality="20" enabled="true" /></Skill>
+    </PathOfBuilding2>`;
+
+    const a = await postJson("/api/build/import", { source: "pob-xml", label: "Order A", payload: left });
+    const b = await postJson("/api/build/import", { source: "pob-xml", label: "Order B", payload: right });
+    const { data } = await postJson("/api/build/compare", { baseId: a.data.snapshot.id, targetId: b.data.snapshot.id });
+
+    // Both skills are present on both sides — nothing added or removed...
+    expect(data.skills.counts.added ?? 0).toBe(0);
+    expect(data.skills.counts.removed ?? 0).toBe(0);
+    // ...and the reorder (groups and gems) is not a change.
+    expect(data.skills.counts.changed ?? 0).toBe(0);
+
+    await fetch(`http://localhost:${pobaiPort}/api/build/${a.data.snapshot.id}`, { method: "DELETE" });
+    await fetch(`http://localhost:${pobaiPort}/api/build/${b.data.snapshot.id}`, { method: "DELETE" });
   });
 });
