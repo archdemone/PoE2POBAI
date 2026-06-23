@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Compare — Hybrid Variant A (Tabbed dense grid)</title>
+<style>
+  :root{
+    --bg:#0d0f14; --panel:#151821; --panel2:#1c2029; --line:#2a2f3a;
+    --text:#e9ebf0; --muted:#868ea2; --gold:#c8aa6e;
+    --mine:#5aa9e6; --theirs:#e0b15a;
+    --good:#54d98c; --good-bg:#13301f; --bad:#f0616d; --bad-bg:#34161a;
+    --warn:#f4c152;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14.5px/1.4 "Segoe UI",system-ui,sans-serif;padding:26px 20px 60px}
+  .wrap{max-width:1080px;margin:0 auto}
+  .topbar{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px}
+  .topbar h1{font-size:18px;margin:0}
+  .topbar .tag{color:var(--muted);font-size:12px}
+
+  .head{display:flex;align-items:center;gap:18px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 18px;margin-bottom:14px}
+  .head .b{flex:1}.head .b.r{text-align:right}
+  .head .role{font-size:10.5px;text-transform:uppercase;letter-spacing:1.4px;color:var(--muted)}
+  .head .name{font-size:18px;font-weight:700}
+  .head .b .name{color:var(--mine)} .head .b.r .name{color:var(--theirs)}
+  .head .sub{color:var(--muted);font-size:12.5px}
+  .head .mid{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .head .vs{color:var(--gold);font-weight:700;font-size:12px}
+  .head .lvgap{font-size:11px;color:var(--muted)}
+
+  .score{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+  .sc{flex:1;min-width:110px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:10px 12px;display:flex;align-items:center;gap:10px}
+  .sc .big{font-size:22px;font-weight:800;line-height:1}
+  .sc .lab{color:var(--muted);font-size:11.5px}
+  .sc.add .big{color:var(--good)} .sc.rem .big{color:var(--bad)} .sc.chg .big{color:var(--warn)} .sc.node .big{color:var(--gold)}
+
+  .tabs{display:flex;gap:4px;margin-bottom:0;border-bottom:1px solid var(--line)}
+  .tab{padding:9px 16px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0}
+  .tab.on{color:var(--text);background:var(--panel);border-color:var(--line);position:relative;top:1px}
+  .tab .pip{display:inline-block;margin-left:7px;font-size:11px;color:var(--gold)}
+
+  .pane{background:var(--panel);border:1px solid var(--line);border-top:none;border-radius:0 0 12px 12px;padding:16px}
+
+  /* dense 2-col stat grid */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:7px 14px}
+  .grpL{grid-column:1/-1;font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:700;margin:8px 0 2px}
+  .cell{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 11px;border-left:3px solid transparent}
+  .cell.leadT{border-left-color:var(--theirs)} .cell.leadM{border-left-color:var(--mine)} .cell.eqc{border-left-color:#39404d}
+  .cell .nm{grid-column:1/-1;font-size:11px;color:var(--muted);margin-bottom:1px}
+  .cell .m{font-weight:700;font-size:15px;color:#cfe4f5;text-align:left}
+  .cell .t{font-weight:700;font-size:15px;color:#f0dcae;text-align:right}
+  .cell .d{font-size:11px;font-weight:700;padding:1px 7px;border-radius:20px}
+  .up{color:var(--good);background:var(--good-bg)} .down{color:var(--bad);background:var(--bad-bg)} .eq{color:var(--muted);background:#23272f}
+  .resbad{color:var(--bad)!important} .resok{color:var(--good)!important}
+
+  /* skills tab */
+  .skillwrap{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .col h4{font-size:11px;text-transform:uppercase;letter-spacing:.8px;margin:0 0 8px}
+  .col.addh h4{color:var(--good)} .col.remh h4{color:var(--bad)} .col.chgh h4{color:var(--warn)}
+  .pill2{display:block;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:8px 11px;margin-bottom:6px;font-weight:600;font-size:13px}
+  .pill2 small{display:block;color:var(--muted);font-weight:400;font-size:11px;margin-top:1px}
+  .note{color:var(--muted);font-size:12px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar"><h1>Build Comparison</h1><span class="tag">Variant A · Tabbed dense grid</span></div>
+
+  <div class="head">
+    <div class="b"><div class="role">My build</div><div class="name">Dconnic_Monka</div><div class="sub">Monk · Martial Artist · Lv 91</div></div>
+    <div class="mid"><span class="vs">VS</span><span class="lvgap">5 levels apart</span></div>
+    <div class="b r"><div class="role">Build to copy</div><div class="name">Target Guide</div><div class="sub">Monk · Martial Artist · Lv 96</div></div>
+  </div>
+
+  <div class="score">
+    <div class="sc add"><span class="big">1</span><span class="lab">skill to add</span></div>
+    <div class="sc rem"><span class="big">1</span><span class="lab">skill to drop</span></div>
+    <div class="sc chg"><span class="big">10</span><span class="lab">gem tweaks</span></div>
+    <div class="sc node"><span class="big">+18</span><span class="lab">passive nodes</span></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab on">Character sheet<span class="pip">17 differ</span></div>
+    <div class="tab">Skills<span class="pip">12</span></div>
+    <div class="tab">Passives<span class="pip">+18</span></div>
+  </div>
+
+  <div class="pane">
+    <div class="grid2">
+      <div class="grpL">Attributes</div>
+      <div class="cell leadT"><span class="nm">Strength</span><span class="m">182</span><span class="d up">+29</span><span class="t">211</span></div>
+      <div class="cell leadM"><span class="nm">Dexterity</span><span class="m">240</span><span class="d down">−14</span><span class="t">226</span></div>
+      <div class="cell leadT"><span class="nm">Intelligence</span><span class="m">98</span><span class="d up">+26</span><span class="t">124</span></div>
+      <div class="cell leadT"><span class="nm">Spirit</span><span class="m">100</span><span class="d up">+50</span><span class="t">150</span></div>
+
+      <div class="grpL">Life &amp; resources</div>
+      <div class="cell leadT"><span class="nm">Life</span><span class="m">3,200</span><span class="d up">+650</span><span class="t">3,850</span></div>
+      <div class="cell leadT"><span class="nm">Energy Shield</span><span class="m">1,100</span><span class="d up">+300</span><span class="t">1,400</span></div>
+      <div class="cell eqc"><span class="nm">Mana</span><span class="m">612</span><span class="d eq">=</span><span class="t">612</span></div>
+      <div class="cell leadT"><span class="nm">Total eHP</span><span class="m">9.1k</span><span class="d up">+1.9k</span><span class="t">11.0k</span></div>
+
+      <div class="grpL">Resistances (cap 75%)</div>
+      <div class="cell eqc"><span class="nm">Fire</span><span class="m resok">75%</span><span class="d eq">=</span><span class="t resok">75%</span></div>
+      <div class="cell leadT"><span class="nm">Cold</span><span class="m resbad">68%</span><span class="d up">+7</span><span class="t resok">75%</span></div>
+      <div class="cell eqc"><span class="nm">Lightning</span><span class="m resok">75%</span><span class="d eq">=</span><span class="t resok">75%</span></div>
+      <div class="cell leadT"><span class="nm">Chaos</span><span class="m resbad">−12%</span><span class="d up">+34</span><span class="t resok">+22%</span></div>
+
+      <div class="grpL">Defences</div>
+      <div class="cell leadT"><span class="nm">Armour</span><span class="m">8,420</span><span class="d up">+3.0k</span><span class="t">11,400</span></div>
+      <div class="cell leadM"><span class="nm">Evasion</span><span class="m">14,900</span><span class="d down">−1.2k</span><span class="t">13,700</span></div>
+      <div class="cell leadT"><span class="nm">Block</span><span class="m">25%</span><span class="d up">+10</span><span class="t">35%</span></div>
+      <div class="cell leadT"><span class="nm">Phys Reduction</span><span class="m">42%</span><span class="d up">+11</span><span class="t">53%</span></div>
+      <div class="cell leadT"><span class="nm">Spell Block</span><span class="m">10%</span><span class="d up">+15</span><span class="t">25%</span></div>
+
+      <div class="grpL">Offence</div>
+      <div class="cell leadT"><span class="nm">Total DPS</span><span class="m">1.20M</span><span class="d up">+50%</span><span class="t">1.80M</span></div>
+      <div class="cell leadT"><span class="nm">Crit Chance</span><span class="m">42%</span><span class="d up">+9</span><span class="t">51%</span></div>
+      <div class="cell leadT"><span class="nm">Crit Multi</span><span class="m">312%</span><span class="d up">+34</span><span class="t">346%</span></div>
+      <div class="cell leadT"><span class="nm">Attack Speed</span><span class="m">4.10</span><span class="d up">+0.6</span><span class="t">4.70</span></div>
+      <div class="cell eqc"><span class="nm">Accuracy</span><span class="m">92%</span><span class="d eq">=</span><span class="t">92%</span></div>
+    </div>
+    <p class="note">Left border colour shows who leads each stat — <span style="color:var(--mine)">blue = mine</span>, <span style="color:var(--theirs)">gold = target</span>, grey = tied. Other tabs (Skills / Passives) swap the panel content.</p>
+  </div>
+</div>
+</body>
+</html>

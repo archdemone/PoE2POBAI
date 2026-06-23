@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Compare — Hybrid Variant D (Tiles + diverging bars)</title>
+<style>
+  :root{
+    --bg:#0c0a07; --panel:#17130d; --panel2:#1f1a12; --line:#3a3122;
+    --text:#efe7d6; --muted:#9c8e74; --gold:#d8b974; --goldDk:#7a6334;
+    --mine:#6db4e8; --theirs:#e6b75a;
+    --good:#5fd07f; --goodDk:#1f5e34; --good-bg:#16301c;
+    --bad:#ef6b6b; --badDk:#5e1f24; --bad-bg:#331616;
+    --neutral:#e9ecf2; --neutralDk:#5b6068; --neu-bg:#2a2d33;
+    /* element colours */
+    --fire:#ff6a4d; --cold:#5aa9e6; --light:#f4d03f; --chaos:#b06ae6;
+    /* attribute colours */
+    --str:#e0685a; --dex:#69c779; --intl:#5aa9e6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(800px 400px at 50% -10%,#241d12,var(--bg));
+    color:var(--text);font:14.5px/1.45 "Segoe UI",system-ui,sans-serif;padding:26px 20px 60px}
+  .wrap{max-width:1100px;margin:0 auto}
+  .topbar{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px}
+  .topbar h1{font-size:18px;margin:0;color:var(--gold);letter-spacing:.5px;display:flex;align-items:center;gap:9px}
+  .topbar .tag{color:var(--muted);font-size:12px}
+
+  .head{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center;margin-bottom:18px}
+  .hc{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--goldDk);border-radius:14px;padding:14px 20px}
+  .hc.r{text-align:right}
+  .hc .role{font-size:10.5px;text-transform:uppercase;letter-spacing:1.6px;color:var(--muted)}
+  .hc .name{font-size:19px;font-weight:700}
+  .hc.l .name{color:var(--mine)} .hc.r .name{color:var(--theirs)}
+  .hc .sub{color:var(--muted);font-size:12.5px}
+  .crest{width:46px;height:46px;border-radius:50%;border:2px solid var(--gold);display:flex;align-items:center;justify-content:center;color:var(--gold);background:#0e0b06}
+  .crest svg{width:24px;height:24px}
+
+  .legend{display:flex;justify-content:center;flex-wrap:wrap;gap:22px;font-size:11.5px;color:var(--muted);margin-bottom:16px}
+  .legend .sw{display:inline-block;width:22px;height:9px;border-radius:3px;vertical-align:0;margin-right:6px}
+  .swg{background:linear-gradient(90deg,var(--goodDk),var(--good))}
+  .swr{background:linear-gradient(90deg,var(--bad),var(--badDk))}
+  .swn{background:linear-gradient(90deg,var(--neutralDk),var(--neutral))}
+
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+  .tile{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:12px;padding:14px}
+  .tile .cap{font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .tile .cap svg{width:13px;height:13px}
+  .tile .big{font-size:26px;font-weight:800;margin-top:4px}
+  .tile.add .big{color:var(--good)}.tile.rem .big{color:var(--bad)}.tile.chg .big{color:var(--gold)}.tile.node .big{color:var(--gold)}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}.tiles{grid-template-columns:1fr 1fr}}
+  .card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .card.wide{grid-column:1/-1}
+  .card h2{font-size:12.5px;text-transform:uppercase;letter-spacing:1.2px;color:var(--gold);margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .card h2 .hi{width:16px;height:16px;flex:none}
+  .card h2 .n{margin-left:auto;color:var(--muted);font-size:11.5px;letter-spacing:0;text-transform:none}
+
+  /* diverging stat bar — colour = who has MORE (from my build's view) */
+  .ds{padding:6px 0 7px;border-bottom:1px dashed #2a2417}
+  .ds:last-child{border-bottom:none}
+  .ds .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+  .ds .lab{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+  .ds .lab svg{width:13px;height:13px;flex:none}
+  .ds .dd{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:20px}
+  .row{display:grid;grid-template-columns:52px 1fr 52px;align-items:center;gap:9px}
+  .mv{text-align:right;font-weight:700;color:#cfe6f6;font-size:13.5px}
+  .tv{text-align:left;font-weight:700;color:#f3dca6;font-size:13.5px}
+  .track{position:relative;height:15px;background:#0a0c11;border-radius:8px;border:1px solid #20242d;overflow:hidden}
+  .track::before{content:"";position:absolute;left:50%;top:1px;bottom:1px;width:1px;background:#4a3f28;z-index:2}
+  .fillM{position:absolute;right:50%;top:0;bottom:0;border-radius:8px 0 0 8px}
+  .fillT{position:absolute;left:50%;top:0;bottom:0;border-radius:0 8px 8px 0}
+
+  /* verdict colouring (applies to both halves + delta pill) */
+  .ds.me   .fillM,.ds.me   .fillT{background:linear-gradient(90deg,var(--goodDk),var(--good))}
+  .ds.tg   .fillM,.ds.tg   .fillT{background:linear-gradient(90deg,var(--bad),var(--badDk))}
+  .ds.tie  .fillM,.ds.tie  .fillT{background:linear-gradient(90deg,var(--neutralDk),var(--neutral))}
+  .ds.me   .dd{color:var(--good);background:var(--good-bg)}
+  .ds.tg   .dd{color:var(--bad);background:var(--bad-bg)}
+  .ds.tie  .dd{color:#cfd3da;background:var(--neu-bg)}
+
+  /* element + attribute label tints */
+  .el-fire{color:var(--fire)!important}.el-cold{color:var(--cold)!important}
+  .el-light{color:var(--light)!important}.el-chaos{color:var(--chaos)!important}
+  .at-str{color:var(--str)!important}.at-dex{color:var(--dex)!important}.at-int{color:var(--intl)!important}
+  .resbad{color:var(--bad)!important}.resok{color:var(--good)!important}
+
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{display:flex;align-items:center;gap:6px;padding:6px 11px;border-radius:20px;border:1px solid var(--line);background:var(--panel);font-size:12.5px;font-weight:600}
+  .chip .t{font-size:9px;text-transform:uppercase;letter-spacing:.5px;padding:1px 6px;border-radius:10px}
+  .chip.add{border-color:#2f5e3a}.chip.add .t{background:var(--good-bg);color:var(--good)}
+  .chip.rem{border-color:#5e2f2f}.chip.rem .t{background:var(--bad-bg);color:var(--bad)}
+  .chip.chg{border-color:#5e5226}.chip.chg .t{background:#332a12;color:var(--gold)}
+  .chip.ok{opacity:.65}.chip.ok .t{background:#241e14;color:var(--muted)}
+
+  svg.ic{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  svg.ic.fill{fill:currentColor;stroke:none}
+</style>
+</head>
+<body>
+
+<!-- icon sheet (minimal hand-made line icons, game-UI style) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-sword" viewBox="0 0 24 24"><polyline points="14.5 17.5 4 7 4 4 7 4 17.5 14.5"/><line x1="13" y1="19" x2="19" y2="13"/><line x1="16" y1="16" x2="20" y2="20"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.8 5.1a5.4 5.4 0 0 0-7.7 0L12 6.2l-1.1-1.1a5.4 5.4 0 1 0-7.7 7.7L12 21l8.8-8.2a5.4 5.4 0 0 0 0-7.7z"/></symbol>
+  <symbol id="i-stats" viewBox="0 0 24 24"><line x1="5" y1="20" x2="5" y2="11"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="19" y1="20" x2="19" y2="14"/></symbol>
+  <symbol id="i-gem" viewBox="0 0 24 24"><polygon points="12 3 19 9 12 21 5 9"/><line x1="5" y1="9" x2="19" y2="9"/><line x1="12" y1="3" x2="9.5" y2="9"/><line x1="12" y1="3" x2="14.5" y2="9"/></symbol>
+  <symbol id="i-prism" viewBox="0 0 24 24"><polygon points="12 3 21 19 3 19"/><line x1="12" y1="3" x2="12" y2="19"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24" class="fill"><polygon points="13 2 4 14 11 14 10 22 20 9 13 9"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3c1 3-1 4-1 6 0 1.4 1.1 2.5 2.5 2.5 1.6 0 2.5-1.3 2.4-3 1.3 1.2 2.1 3 2.1 5a8 8 0 0 1-16 0c0-3.6 2.7-6.4 4-8 .2 1.6 1 2.6 2 3 .4-2.6-.5-4.5 2-5.5z"/></symbol>
+  <symbol id="i-snow" viewBox="0 0 24 24"><line x1="12" y1="3" x2="12" y2="21"/><line x1="4.2" y1="7.5" x2="19.8" y2="16.5"/><line x1="19.8" y1="7.5" x2="4.2" y2="16.5"/></symbol>
+  <symbol id="i-chaos" viewBox="0 0 24 24" class="fill"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 24 24"><polyline points="17 2 21 6 17 10"/><path d="M3 12V9a3 3 0 0 1 3-3h15"/><polyline points="7 22 3 18 7 14"/><path d="M21 12v3a3 3 0 0 1-3 3H3"/></symbol>
+  <symbol id="i-node" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></symbol>
+  <symbol id="i-crossed" viewBox="0 0 24 24"><polyline points="14.5 17.5 4 7 4 4 7 4 17.5 14.5"/><polyline points="9.5 17.5 20 7 20 4 17 4 6.5 14.5"/></symbol>
+</svg>
+
+<div class="wrap">
+  <div class="topbar"><h1><svg class="ic" style="width:18px;height:18px;color:var(--gold)"><use href="#i-crossed"/></svg> Build Comparison</h1><span class="tag">Variant D · element-tinted resistances + badges</span></div>
+
+  <div class="head">
+    <div class="hc l"><div class="role">My build</div><div class="name">Dconnic_Monka</div><div class="sub">Monk · Martial Artist · Lv 91</div></div>
+    <div class="crest"><svg class="ic"><use href="#i-crossed"/></svg></div>
+    <div class="hc r"><div class="role">Build to copy</div><div class="name">Target Guide</div><div class="sub">Monk · Martial Artist · Lv 96</div></div>
+  </div>
+
+  <div class="legend">
+    <span>◀ my build grows left · target grows right ▶</span>
+    <span><span class="sw swg"></span>green = I have more</span>
+    <span><span class="sw swr"></span>red = target has more</span>
+    <span><span class="sw swn"></span>white = same</span>
+  </div>
+
+  <div class="tiles">
+    <div class="tile add"><div class="cap"><svg class="ic" style="color:var(--good)"><use href="#i-plus"/></svg>Skills to add</div><div class="big">1</div></div>
+    <div class="tile rem"><div class="cap"><svg class="ic" style="color:var(--bad)"><use href="#i-minus"/></svg>Skills to drop</div><div class="big">1</div></div>
+    <div class="tile chg"><div class="cap"><svg class="ic" style="color:var(--gold)"><use href="#i-swap"/></svg>Gem tweaks</div><div class="big">10</div></div>
+    <div class="tile node"><div class="cap"><svg class="ic" style="color:var(--gold)"><use href="#i-node"/></svg>Passive nodes</div><div class="big">+18</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2><svg class="ic hi"><use href="#i-stats"/></svg>Attributes <span class="n">3 differ</span></h2>
+      <div class="ds tg"><div class="top"><span class="lab at-str">Strength</span><span class="dd">+29 ▶</span></div><div class="row"><span class="mv">182</span><div class="track"><div class="fillM" style="width:43%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">211</span></div></div>
+      <div class="ds me"><div class="top"><span class="lab at-dex">Dexterity</span><span class="dd">◀ +14</span></div><div class="row"><span class="mv">240</span><div class="track"><div class="fillM" style="width:50%"></div><div class="fillT" style="width:47%"></div></div><span class="tv">226</span></div></div>
+      <div class="ds tg"><div class="top"><span class="lab at-int">Intelligence</span><span class="dd">+26 ▶</span></div><div class="row"><span class="mv">98</span><div class="track"><div class="fillM" style="width:40%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">124</span></div></div>
+      <div class="ds tg"><div class="top"><span class="lab">Spirit</span><span class="dd">+50 ▶</span></div><div class="row"><span class="mv">100</span><div class="track"><div class="fillM" style="width:33%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">150</span></div></div>
+    </div>
+
+    <div class="card">
+      <h2><svg class="ic hi" style="color:var(--bad)"><use href="#i-heart"/></svg>Life &amp; eHP <span class="n">3 differ</span></h2>
+      <div class="ds tg"><div class="top"><span class="lab">Life</span><span class="dd">+650 ▶</span></div><div class="row"><span class="mv">3,200</span><div class="track"><div class="fillM" style="width:42%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">3,850</span></div></div>
+      <div class="ds tg"><div class="top"><span class="lab">Energy Shield</span><span class="dd">+300 ▶</span></div><div class="row"><span class="mv">1,100</span><div class="track"><div class="fillM" style="width:39%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">1,400</span></div></div>
+      <div class="ds tie"><div class="top"><span class="lab">Mana</span><span class="dd">= tied</span></div><div class="row"><span class="mv">612</span><div class="track"><div class="fillM" style="width:50%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">612</span></div></div>
+      <div class="ds tg"><div class="top"><span class="lab">Total eHP</span><span class="dd">+1.9k ▶</span></div><div class="row"><span class="mv">9.1k</span><div class="track"><div class="fillM" style="width:41%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">11.0k</span></div></div>
+    </div>
+
+    <div class="card">
+      <h2><svg class="ic hi"><use href="#i-prism"/></svg>Resistances <span class="n">cap 75% · 2 differ</span></h2>
+      <div class="ds tie"><div class="top"><span class="lab el-fire"><svg class="ic"><use href="#i-flame"/></svg>Fire</span><span class="dd">= capped</span></div><div class="row"><span class="mv resok">75%</span><div class="track"><div class="fillM" style="width:50%"></div><div class="fillT" style="width:50%"></div></div><span class="tv resok">75%</span></div></div>
+      <div class="ds tg"><div class="top"><span class="lab el-cold"><svg class="ic"><use href="#i-snow"/></svg>Cold</span><span class="dd">+7 ▶</span></div><div class="row"><span class="mv resbad">68%</span><div class="track"><div class="fillM" style="width:45%"></div><div class="fillT" style="width:50%"></div></div><span class="tv resok">75%</span></div></div>
+      <div class="ds tie"><div class="top"><span class="lab el-light"><svg class="ic"><use href="#i-bolt"/></svg>Lightning</span><span class="dd">= capped</span></div><div class="row"><span class="mv resok">75%</span><div class="track"><div class="fillM" style="width:50%"></div><div class="fillT" style="width:50%"></div></div><span class="tv resok">75%</span></div></div>
+      <div class="ds tg"><div class="top"><span class="lab el-chaos"><svg class="ic"><use href="#i-chaos"/></svg>Chaos</span><span class="dd">+34 ▶</span></div><div class="row"><span class="mv resbad">−12%</span><div class="track"><div class="fillM" style="width:9%"></div><div class="fillT" style="width:42%"></div></div><span class="tv resok">+22%</span></div></div>
+    </div>
+
+    <div class="card">
+      <h2><svg class="ic hi"><use href="#i-shield"/></svg>Defences <span class="n">5 differ</span></h2>
+      <div class="ds tg"><div class="top"><span class="lab">Armour</span><span class="dd">+3.0k ▶</span></div><div class="row"><span class="mv">8,420</span><div class="track"><div class="fillM" style="width:37%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">11,400</span></div></div>
+      <div class="ds me"><div class="top"><span class="lab">Evasion</span><span class="dd">◀ +1.2k</span></div><div class="row"><span class="mv">14,900</span><div class="track"><div class="fillM" style="width:50%"></div><div class="fillT" style="width:46%"></div></div><span class="tv">13,700</span></div></div>
+      <div class="ds tg"><div class="top"><span class="lab">Block</span><span class="dd">+10 ▶</span></div><div class="row"><span class="mv">25%</span><div class="track"><div class="fillM" style="width:36%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">35%</span></div></div>
+      <div class="ds tg"><div class="top"><span class="lab">Phys Reduction</span><span class="dd">+11 ▶</span></div><div class="row"><span class="mv">42%</span><div class="track"><div class="fillM" style="width:40%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">53%</span></div></div>
+      <div class="ds tg"><div class="top"><span class="lab">Spell Block</span><span class="dd">+15 ▶</span></div><div class="row"><span class="mv">10%</span><div class="track"><div class="fillM" style="width:20%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">25%</span></div></div>
+    </div>
+
+    <div class="card wide">
+      <h2><svg class="ic hi"><use href="#i-sword"/></svg>Offence <span class="n">4 differ · 1 tied</span></h2>
+      <div class="grid">
+        <div>
+          <div class="ds tg"><div class="top"><span class="lab"><svg class="ic"><use href="#i-sword"/></svg>Total DPS</span><span class="dd">+50% ▶</span></div><div class="row"><span class="mv">1.20M</span><div class="track"><div class="fillM" style="width:33%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">1.80M</span></div></div>
+          <div class="ds tg"><div class="top"><span class="lab">Crit Chance</span><span class="dd">+9 ▶</span></div><div class="row"><span class="mv">42%</span><div class="track"><div class="fillM" style="width:41%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">51%</span></div></div>
+          <div class="ds tg"><div class="top"><span class="lab">Crit Multiplier</span><span class="dd">+34 ▶</span></div><div class="row"><span class="mv">312%</span><div class="track"><div class="fillM" style="width:45%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">346%</span></div></div>
+        </div>
+        <div>
+          <div class="ds tg"><div class="top"><span class="lab">Attack Speed</span><span class="dd">+0.6 ▶</span></div><div class="row"><span class="mv">4.10</span><div class="track"><div class="fillM" style="width:44%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">4.70</span></div></div>
+          <div class="ds tie"><div class="top"><span class="lab">Accuracy</span><span class="dd">= tied</span></div><div class="row"><span class="mv">92%</span><div class="track"><div class="fillM" style="width:50%"></div><div class="fillT" style="width:50%"></div></div><span class="tv">92%</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card wide">
+      <h2><svg class="ic hi"><use href="#i-gem"/></svg>Skills &amp; passives <span class="n">14 groups · 3 identical</span></h2>
+      <div class="chips">
+        <span class="chip add"><span class="t">add</span>Refutation</span>
+        <span class="chip rem"><span class="t">drop</span>Mace Strike</span>
+        <span class="chip chg"><span class="t">tweak</span>Wind Dancer</span>
+        <span class="chip chg"><span class="t">tweak</span>Blasphemy</span>
+        <span class="chip chg"><span class="t">tweak</span>Spirit Vessel</span>
+        <span class="chip chg"><span class="t">tweak</span>Skeletal Storm Mage</span>
+        <span class="chip chg"><span class="t">tweak</span>Elemental Weakness</span>
+        <span class="chip chg"><span class="t">tweak</span>Ghost Dance</span>
+        <span class="chip ok"><span class="t">same</span>Pain Offering</span>
+        <span class="chip ok"><span class="t">same</span>Verisium Manifestations</span>
+        <span class="chip ok"><span class="t">same</span>Purity of Fire</span>
+        <span class="chip add"><span class="t">+18</span>passive nodes</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -3,7 +3,7 @@ import React, { useState } from "react";
 interface ImportModalProps {
   open: boolean;
   onClose: () => void;
-  onImport: (code: string, label: string, source: string) => Promise<void>;
+  onImport: (payload: string, label: string, source: string) => Promise<void>;
 }
 
 function detectSource(text: string): string {
@@ -14,34 +14,34 @@ function detectSource(text: string): string {
 }
 
 export function ImportModal({ open, onClose, onImport }: ImportModalProps) {
-  const [code, setCode] = useState("");
+  const [payload, setPayload] = useState("");
   const [label, setLabel] = useState("");
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!open) return null;
 
-  const source = detectSource(code);
+  const source = detectSource(payload);
   const handleImport = async () => {
-    if (!code.trim()) return;
+    if (!payload.trim()) return;
     setImporting(true); setError(null);
-    try { await onImport(code.trim(), label.trim(), source); setCode(""); setLabel(""); onClose(); }
-    catch (e: any) { setError(e.message || "Import failed"); }
+    try { await onImport(payload.trim(), label.trim(), source); setPayload(""); setLabel(""); onClose(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Import failed"); }
     finally { setImporting(false); }
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content" role="dialog" aria-modal="true" aria-label="Import build" onClick={(e) => e.stopPropagation()}>
         <h3>Import Build</h3>
         <textarea className="import-textarea" placeholder="Paste PoB export code, XML, or URL..."
-          value={code} onChange={(e) => setCode(e.target.value)} disabled={importing} />
+          value={payload} onChange={(e) => setPayload(e.target.value)} disabled={importing} />
         <input className="import-label-input" placeholder="Label (optional)"
           value={label} onChange={(e) => setLabel(e.target.value)} disabled={importing} />
-        {code && <div className="import-source">Detected: {source}</div>}
+        {payload && <div className="import-source">Detected: {source}</div>}
         {error && <div className="import-error">{error}</div>}
         <div className="modal-actions">
           <button onClick={onClose} disabled={importing}>Cancel</button>
-          <button onClick={handleImport} disabled={importing || !code.trim()}>
+          <button onClick={handleImport} disabled={importing || !payload.trim()}>
             {importing ? "Importing..." : "Import"}
           </button>
         </div>

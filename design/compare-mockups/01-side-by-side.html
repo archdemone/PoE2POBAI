@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Compare — Side by Side (Mockup 1)</title>
+<style>
+  :root{
+    --bg:#0e1015; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --text:#e7e9ee; --muted:#8b93a7; --gold:#c8aa6e;
+    --good:#54d98c; --good-bg:#13301f; --bad:#f0616d; --bad-bg:#34161a;
+    --warn:#f4c152; --warn-bg:#3a2f12;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1a1f2b,var(--bg));color:var(--text);
+    font:15px/1.45 "Segoe UI",system-ui,sans-serif;padding:28px 20px 60px}
+  .wrap{max-width:1100px;margin:0 auto}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+  .topbar h1{font-size:18px;margin:0;font-weight:600;letter-spacing:.3px}
+  .topbar .tag{color:var(--muted);font-size:12px}
+
+  /* identity header */
+  .ids{display:grid;grid-template-columns:1fr 64px 1fr;gap:0;align-items:stretch;margin-bottom:22px}
+  .idcard{background:var(--panel);border:1px solid var(--line);padding:16px 18px}
+  .idcard.left{border-radius:12px 0 0 12px;border-right:none}
+  .idcard.right{border-radius:0 12px 12px 0;border-left:none;text-align:right}
+  .idcard .role{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted)}
+  .idcard .name{font-size:20px;font-weight:700;margin:3px 0 2px}
+  .idcard .sub{color:var(--muted);font-size:13px}
+  .vs{display:flex;align-items:center;justify-content:center;background:var(--panel2);
+    border:1px solid var(--line);color:var(--gold);font-weight:700;font-size:13px}
+
+  /* section */
+  .section{margin-bottom:26px}
+  .section h2{font-size:13px;text-transform:uppercase;letter-spacing:1.5px;color:var(--gold);
+    margin:0 0 10px;display:flex;align-items:center;gap:8px}
+  .section h2 .count{color:var(--muted);font-weight:500;letter-spacing:0;text-transform:none;font-size:12px}
+
+  .row{display:grid;grid-template-columns:1fr 96px 1fr;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:6px;overflow:hidden}
+  .cell{padding:10px 14px}
+  .cell.r{text-align:right}
+  .cell .k{color:var(--muted);font-size:12px}
+  .cell .v{font-size:16px;font-weight:600}
+  .gutter{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    align-self:stretch;background:var(--panel2);padding:6px 0;font-size:12px;font-weight:700}
+  .delta{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:12px}
+  .up{color:var(--good);background:var(--good-bg)}
+  .down{color:var(--bad);background:var(--bad-bg)}
+  .same{color:var(--muted);background:#20242d}
+  .barwrap{height:5px;background:#0c0e12;border-radius:3px;margin-top:7px;overflow:hidden}
+  .bar{height:100%;border-radius:3px}
+  .bar.good{background:linear-gradient(90deg,#2f8f5a,var(--good))}
+  .bar.neu{background:#3a4150}
+
+  /* skills two-col */
+  .skillgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .skillcol h3{font-size:12px;color:var(--muted);margin:0 0 6px;font-weight:600}
+  .skill{display:flex;align-items:center;gap:9px;background:var(--panel);border:1px solid var(--line);
+    border-radius:7px;padding:8px 11px;margin-bottom:5px}
+  .skill .dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .skill .lbl{font-weight:600}
+  .skill .gems{color:var(--muted);font-size:12px;margin-left:auto;text-align:right}
+  .skill.add{border-color:#2c5e41;background:linear-gradient(90deg,var(--good-bg),var(--panel))}
+  .skill.rem{border-color:#5e2c33;background:linear-gradient(90deg,var(--bad-bg),var(--panel))}
+  .skill.chg{border-color:#5e5326}
+  .d-add{background:var(--good)} .d-rem{background:var(--bad)} .d-chg{background:var(--warn)} .d-same{background:#48505f}
+  .ghost{opacity:.35;border-style:dashed}
+  .legend{display:flex;gap:16px;color:var(--muted);font-size:12px;margin-top:4px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:8px;height:8px;border-radius:50%}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <h1>Build Comparison</h1>
+    <span class="tag">Mockup 1 · Side-by-side with delta gutter</span>
+  </div>
+
+  <div class="ids">
+    <div class="idcard left">
+      <div class="role">My build</div>
+      <div class="name">Dconnic_Monka</div>
+      <div class="sub">Monk · Martial Artist · Level 91</div>
+    </div>
+    <div class="vs">VS</div>
+    <div class="idcard right">
+      <div class="role">Build to copy</div>
+      <div class="name">Target Guide</div>
+      <div class="sub">Monk · Martial Artist · Level 96</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Defenses &amp; offense <span class="count">· 5 differ · 1 matched</span></h2>
+
+    <div class="row">
+      <div class="cell"><div class="k">Life</div><div class="v">3,200</div><div class="barwrap"><div class="bar neu" style="width:83%"></div></div></div>
+      <div class="gutter"><span class="delta up">▲ +650</span></div>
+      <div class="cell r"><div class="k">Life</div><div class="v">3,850</div><div class="barwrap"><div class="bar good" style="width:100%"></div></div></div>
+    </div>
+
+    <div class="row">
+      <div class="cell"><div class="k">Energy Shield</div><div class="v">1,100</div><div class="barwrap"><div class="bar neu" style="width:78%"></div></div></div>
+      <div class="gutter"><span class="delta up">▲ +300</span></div>
+      <div class="cell r"><div class="k">Energy Shield</div><div class="v">1,400</div><div class="barwrap"><div class="bar good" style="width:100%"></div></div></div>
+    </div>
+
+    <div class="row">
+      <div class="cell"><div class="k">Chaos Resist</div><div class="v" style="color:var(--bad)">−12%</div></div>
+      <div class="gutter"><span class="delta up">▲ +34</span></div>
+      <div class="cell r"><div class="k">Chaos Resist</div><div class="v" style="color:var(--good)">+22%</div></div>
+    </div>
+
+    <div class="row">
+      <div class="cell"><div class="k">Fire Resist</div><div class="v">75%</div></div>
+      <div class="gutter"><span class="delta same">= same</span></div>
+      <div class="cell r"><div class="k">Fire Resist</div><div class="v">75%</div></div>
+    </div>
+
+    <div class="row">
+      <div class="cell"><div class="k">Total DPS</div><div class="v">1.20M</div><div class="barwrap"><div class="bar neu" style="width:67%"></div></div></div>
+      <div class="gutter"><span class="delta up">▲ +50%</span></div>
+      <div class="cell r"><div class="k">Total DPS</div><div class="v">1.80M</div><div class="barwrap"><div class="bar good" style="width:100%"></div></div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Skills <span class="count">· 1 to add · 1 to drop · 10 to tweak</span></h2>
+    <div class="skillgrid">
+      <div class="skillcol">
+        <h3>My build has</h3>
+        <div class="skill rem"><span class="dot d-rem"></span><span class="lbl">Mace Strike</span><span class="gems">drop this</span></div>
+        <div class="skill chg"><span class="dot d-chg"></span><span class="lbl">Blasphemy</span><span class="gems">5 gems</span></div>
+        <div class="skill chg"><span class="dot d-chg"></span><span class="lbl">Wind Dancer</span><span class="gems">6 gems</span></div>
+        <div class="skill"><span class="dot d-same"></span><span class="lbl">Pain Offering</span><span class="gems">6 gems</span></div>
+        <div class="skill"><span class="dot d-same"></span><span class="lbl">Verisium Manifestations</span><span class="gems">6 gems</span></div>
+        <div class="skill ghost"><span class="dot d-add"></span><span class="lbl">Refutation</span><span class="gems">missing</span></div>
+      </div>
+      <div class="skillcol">
+        <h3>Target build has</h3>
+        <div class="skill ghost"><span class="dot d-rem"></span><span class="lbl">Mace Strike</span><span class="gems">not used</span></div>
+        <div class="skill chg"><span class="dot d-chg"></span><span class="lbl">Blasphemy</span><span class="gems">6 gems</span></div>
+        <div class="skill chg"><span class="dot d-chg"></span><span class="lbl">Wind Dancer</span><span class="gems">3 gems</span></div>
+        <div class="skill"><span class="dot d-same"></span><span class="lbl">Pain Offering</span><span class="gems">6 gems</span></div>
+        <div class="skill"><span class="dot d-same"></span><span class="lbl">Verisium Manifestations</span><span class="gems">6 gems</span></div>
+        <div class="skill add"><span class="dot d-add"></span><span class="lbl">Refutation</span><span class="gems">add this</span></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i class="d-add"></i> only in target (add)</span>
+      <span><i class="d-rem"></i> only in mine (drop)</span>
+      <span><i class="d-chg"></i> tweak gems</span>
+      <span><i class="d-same"></i> identical</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Passive tree <span class="count">· +18 to allocate · −3 to refund</span></h2>
+    <div class="row">
+      <div class="cell"><div class="k">Allocated nodes</div><div class="v">122</div></div>
+      <div class="gutter"><span class="delta up">▲ +8</span></div>
+      <div class="cell r"><div class="k">Allocated nodes</div><div class="v">130</div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

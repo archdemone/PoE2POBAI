@@ -5,15 +5,20 @@
   "description": "PoBAI proof-of-concept web assistant scaffold for Path of Building 2 snapshots.",
   "type": "module",
   "scripts": {
+    "launch": "node scripts/launch-pobai.mjs",
     "start": "npm run build --workspace apps/pobai-web && node apps/pobai-server/src/index.mjs",
     "dev": "concurrently -n server,web -c blue,green \"npm run dev --workspace apps/pobai-server\" \"npm run dev --workspace apps/pobai-web\"",
     "build": "npm run build --workspaces --if-present",
+    "bridge:install": "node integrations/pob2-addon/install-bridge.mjs",
+    "bridge:dry-run": "node integrations/pob2-addon/install-bridge.mjs --dry-run",
+    "tree:build": "node scripts/build-tree-index.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"
   },
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/pobai-protocol",
+    "packages/pobai-parser"
   ],
   "devDependencies": {
     "concurrently": "^9.2.1",

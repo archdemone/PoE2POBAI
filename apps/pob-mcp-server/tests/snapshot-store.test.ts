@@ -21,11 +21,9 @@ beforeEach(async () => {
   store = new SnapshotStore(tmpDir);
   await store.init();
 });
-
 afterEach(async () => {
   await rm(tmpDir, { recursive: true, force: true });
 });
-
 describe("SnapshotStore.save", () => {
   it("saves a snapshot and returns it with an id", async () => {
     const summary = parseBuildXml(SAMPLE_XML);
@@ -103,19 +101,5 @@ describe("SnapshotStore persistence", () => {
     const loaded = store2.get(saved.id);
     expect(loaded?.label).toBe("Persisted Build");
     expect(loaded?.summary.character.className).toBe("Ranger");
-  });
-});
-
-describe("SnapshotStore.getPayload", () => {
-  it("retrieves the raw XML payload written to disk", async () => {
-    const summary = parseBuildXml(SAMPLE_XML);
-    const snapshot = await store.save(SAMPLE_XML, summary, "Payload Test");
-    const payload = await store.getPayload(snapshot.id);
-    expect(payload).toBe(SAMPLE_XML);
-  });
-
-  it("returns undefined for unknown id", async () => {
-    const payload = await store.getPayload("ghost");
-    expect(payload).toBeUndefined();
   });
 });

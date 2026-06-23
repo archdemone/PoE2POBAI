@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Compare — Hybrid Variant C (Tile dashboard)</title>
+<style>
+  :root{
+    --bg:#0c0a07; --panel:#17130d; --panel2:#1f1a12; --line:#3a3122;
+    --text:#efe7d6; --muted:#9c8e74; --gold:#d8b974; --goldDk:#7a6334;
+    --mine:#6db4e8; --theirs:#e6b75a;
+    --good:#7bd98c; --good-bg:#16301c; --bad:#ef6b6b; --bad-bg:#331616; --warn:#f0c24a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:
+      radial-gradient(800px 400px at 50% -10%,#241d12,var(--bg));
+    color:var(--text);font:14.5px/1.45 "Segoe UI",system-ui,sans-serif;padding:26px 20px 60px}
+  .wrap{max-width:1100px;margin:0 auto}
+  .topbar{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px}
+  .topbar h1{font-size:18px;margin:0;color:var(--gold);letter-spacing:.5px}
+  .topbar .tag{color:var(--muted);font-size:12px}
+
+  .head{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center;margin-bottom:18px}
+  .hc{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--goldDk);border-radius:14px;padding:14px 20px;box-shadow:inset 0 0 0 1px #00000040}
+  .hc.r{text-align:right}
+  .hc .role{font-size:10.5px;text-transform:uppercase;letter-spacing:1.6px;color:var(--muted)}
+  .hc .name{font-size:19px;font-weight:700}
+  .hc.l .name{color:var(--mine)} .hc.r .name{color:var(--theirs)}
+  .hc .sub{color:var(--muted);font-size:12.5px}
+  .crest{width:46px;height:46px;border-radius:50%;border:2px solid var(--gold);display:flex;align-items:center;justify-content:center;color:var(--gold);font-weight:800;font-size:12px;background:#0e0b06}
+
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+  .tile{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:12px;padding:14px;position:relative;overflow:hidden}
+  .tile .cap{font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+  .tile .big{font-size:26px;font-weight:800;margin-top:4px}
+  .tile.add .big{color:var(--good)}.tile.rem .big{color:var(--bad)}.tile.chg .big{color:var(--warn)}.tile.node .big{color:var(--gold)}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}.tiles{grid-template-columns:1fr 1fr}}
+  .card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .card.wide{grid-column:1/-1}
+  .card h2{font-size:12.5px;text-transform:uppercase;letter-spacing:1.2px;color:var(--gold);margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .card h2 .n{margin-left:auto;color:var(--muted);font-size:11.5px;letter-spacing:0;text-transform:none}
+
+  .stat{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed #2a2417}
+  .stat:last-child{border-bottom:none}
+  .stat .lab{grid-column:1/-1;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:-2px}
+  .stat .mv{font-size:17px;font-weight:700;color:#cfe6f6}
+  .stat .tv{font-size:17px;font-weight:700;color:#f3dca6;text-align:right}
+  .stat .mid{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:64px}
+  .d{font-size:11px;font-weight:700;padding:1px 8px;border-radius:20px}
+  .up{color:var(--good);background:var(--good-bg)}.down{color:var(--bad);background:var(--bad-bg)}.eq{color:var(--muted);background:#241e14}
+  .who{font-size:9px;text-transform:uppercase;letter-spacing:.5px}
+  .who.m{color:var(--mine)}.who.t{color:var(--theirs)}.who.e{color:var(--muted)}
+  .resbad{color:var(--bad)!important}.resok{color:var(--good)!important}
+
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{display:flex;align-items:center;gap:6px;padding:6px 11px;border-radius:20px;border:1px solid var(--line);background:var(--panel);font-size:12.5px;font-weight:600}
+  .chip .t{font-size:9px;text-transform:uppercase;letter-spacing:.5px;padding:1px 6px;border-radius:10px}
+  .chip.add{border-color:#2f5e3a}.chip.add .t{background:var(--good-bg);color:var(--good)}
+  .chip.rem{border-color:#5e2f2f}.chip.rem .t{background:var(--bad-bg);color:var(--bad)}
+  .chip.chg{border-color:#5e5226}.chip.chg .t{background:#332a12;color:var(--warn)}
+  .chip.ok{opacity:.65}.chip.ok .t{background:#241e14;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar"><h1>⚔ Build Comparison</h1><span class="tag">Variant C · Tile dashboard (PoE skin)</span></div>
+
+  <div class="head">
+    <div class="hc l"><div class="role">My build</div><div class="name">Dconnic_Monka</div><div class="sub">Monk · Martial Artist · Lv 91</div></div>
+    <div class="crest">VS</div>
+    <div class="hc r"><div class="role">Build to copy</div><div class="name">Target Guide</div><div class="sub">Monk · Martial Artist · Lv 96</div></div>
+  </div>
+
+  <div class="tiles">
+    <div class="tile add"><div class="cap">Skills to add</div><div class="big">1</div></div>
+    <div class="tile rem"><div class="cap">Skills to drop</div><div class="big">1</div></div>
+    <div class="tile chg"><div class="cap">Gem tweaks</div><div class="big">10</div></div>
+    <div class="tile node"><div class="cap">Passive nodes</div><div class="big">+18</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Attributes <span class="n">4 differ</span></h2>
+      <div class="stat"><span class="lab">Strength</span><span class="mv">182</span><span class="mid"><span class="d up">+29</span><span class="who t">target</span></span><span class="tv">211</span></div>
+      <div class="stat"><span class="lab">Dexterity</span><span class="mv">240</span><span class="mid"><span class="d down">−14</span><span class="who m">mine</span></span><span class="tv">226</span></div>
+      <div class="stat"><span class="lab">Intelligence</span><span class="mv">98</span><span class="mid"><span class="d up">+26</span><span class="who t">target</span></span><span class="tv">124</span></div>
+      <div class="stat"><span class="lab">Spirit</span><span class="mv">100</span><span class="mid"><span class="d up">+50</span><span class="who t">target</span></span><span class="tv">150</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Life &amp; eHP <span class="n">3 differ</span></h2>
+      <div class="stat"><span class="lab">Life</span><span class="mv">3,200</span><span class="mid"><span class="d up">+650</span><span class="who t">target</span></span><span class="tv">3,850</span></div>
+      <div class="stat"><span class="lab">Energy Shield</span><span class="mv">1,100</span><span class="mid"><span class="d up">+300</span><span class="who t">target</span></span><span class="tv">1,400</span></div>
+      <div class="stat"><span class="lab">Mana</span><span class="mv">612</span><span class="mid"><span class="d eq">=</span><span class="who e">tied</span></span><span class="tv">612</span></div>
+      <div class="stat"><span class="lab">Total eHP</span><span class="mv">9.1k</span><span class="mid"><span class="d up">+1.9k</span><span class="who t">target</span></span><span class="tv">11.0k</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Resistances <span class="n">cap 75% · 2 differ</span></h2>
+      <div class="stat"><span class="lab">Fire</span><span class="mv resok">75%</span><span class="mid"><span class="d eq">=</span><span class="who e">capped</span></span><span class="tv resok">75%</span></div>
+      <div class="stat"><span class="lab">Cold</span><span class="mv resbad">68%</span><span class="mid"><span class="d up">+7</span><span class="who t">target</span></span><span class="tv resok">75%</span></div>
+      <div class="stat"><span class="lab">Lightning</span><span class="mv resok">75%</span><span class="mid"><span class="d eq">=</span><span class="who e">capped</span></span><span class="tv resok">75%</span></div>
+      <div class="stat"><span class="lab">Chaos</span><span class="mv resbad">−12%</span><span class="mid"><span class="d up">+34</span><span class="who t">target</span></span><span class="tv resok">+22%</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Defences <span class="n">5 differ</span></h2>
+      <div class="stat"><span class="lab">Armour</span><span class="mv">8,420</span><span class="mid"><span class="d up">+3.0k</span><span class="who t">target</span></span><span class="tv">11,400</span></div>
+      <div class="stat"><span class="lab">Evasion</span><span class="mv">14,900</span><span class="mid"><span class="d down">−1.2k</span><span class="who m">mine</span></span><span class="tv">13,700</span></div>
+      <div class="stat"><span class="lab">Block</span><span class="mv">25%</span><span class="mid"><span class="d up">+10</span><span class="who t">target</span></span><span class="tv">35%</span></div>
+      <div class="stat"><span class="lab">Phys Reduction</span><span class="mv">42%</span><span class="mid"><span class="d up">+11</span><span class="who t">target</span></span><span class="tv">53%</span></div>
+      <div class="stat"><span class="lab">Spell Block</span><span class="mv">10%</span><span class="mid"><span class="d up">+15</span><span class="who t">target</span></span><span class="tv">25%</span></div>
+    </div>
+
+    <div class="card wide">
+      <h2>Offence <span class="n">4 differ · 1 tied</span></h2>
+      <div class="grid">
+        <div>
+          <div class="stat"><span class="lab">Total DPS</span><span class="mv">1.20M</span><span class="mid"><span class="d up">+50%</span><span class="who t">target</span></span><span class="tv">1.80M</span></div>
+          <div class="stat"><span class="lab">Crit Chance</span><span class="mv">42%</span><span class="mid"><span class="d up">+9</span><span class="who t">target</span></span><span class="tv">51%</span></div>
+          <div class="stat"><span class="lab">Crit Multiplier</span><span class="mv">312%</span><span class="mid"><span class="d up">+34</span><span class="who t">target</span></span><span class="tv">346%</span></div>
+        </div>
+        <div>
+          <div class="stat"><span class="lab">Attack Speed</span><span class="mv">4.10</span><span class="mid"><span class="d up">+0.6</span><span class="who t">target</span></span><span class="tv">4.70</span></div>
+          <div class="stat"><span class="lab">Accuracy</span><span class="mv">92%</span><span class="mid"><span class="d eq">=</span><span class="who e">tied</span></span><span class="tv">92%</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card wide">
+      <h2>Skills &amp; passives <span class="n">11 groups · 3 identical</span></h2>
+      <div class="chips">
+        <span class="chip add"><span class="t">add</span>Refutation</span>
+        <span class="chip rem"><span class="t">drop</span>Mace Strike</span>
+        <span class="chip chg"><span class="t">tweak</span>Wind Dancer</span>
+        <span class="chip chg"><span class="t">tweak</span>Blasphemy</span>
+        <span class="chip chg"><span class="t">tweak</span>Spirit Vessel</span>
+        <span class="chip chg"><span class="t">tweak</span>Skeletal Storm Mage</span>
+        <span class="chip chg"><span class="t">tweak</span>Elemental Weakness</span>
+        <span class="chip chg"><span class="t">tweak</span>Ghost Dance</span>
+        <span class="chip ok"><span class="t">same</span>Pain Offering</span>
+        <span class="chip ok"><span class="t">same</span>Verisium Manifestations</span>
+        <span class="chip ok"><span class="t">same</span>Purity of Fire</span>
+        <span class="chip add"><span class="t">+18</span>passive nodes</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

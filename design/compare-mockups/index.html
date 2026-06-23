@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Compare Redesign — Mockups</title>
+<style>
+  :root{--bg:#0e1015;--panel:#171a21;--line:#2a2f3a;--text:#e7e9ee;--muted:#8b93a7;--gold:#c8aa6e;--good:#54d98c}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1a1f2b,var(--bg));color:var(--text);
+    font:15px/1.5 "Segoe UI",system-ui,sans-serif;padding:40px 20px}
+  .wrap{max-width:900px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 28px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  a.card{display:block;text-decoration:none;color:inherit;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:20px;transition:border-color .15s,transform .15s}
+  a.card:hover{border-color:var(--gold);transform:translateY(-2px)}
+  .num{font-size:12px;color:var(--gold);font-weight:700;letter-spacing:1px}
+  .ttl{font-size:18px;font-weight:700;margin:6px 0}
+  .desc{color:var(--muted);font-size:13.5px}
+  .best{display:inline-block;margin-left:8px;font-size:10px;color:var(--good);border:1px solid var(--good);border-radius:20px;padding:1px 8px;vertical-align:2px}
+  .note{margin-top:26px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Compare section — redesign mockups</h1>
+  <p class="sub">Same data (Dconnic_Monka Lv 91 vs Target Guide Lv 96). Click a direction to view it full-size.</p>
+  <div class="grid">
+    <a class="card" href="01-side-by-side.html">
+      <div class="num">DIRECTION 1</div>
+      <div class="ttl">Side-by-side + delta gutter</div>
+      <div class="desc">Two build columns with a center strip showing the difference. Mirrors PoB's own layout — instantly tells you which side has more.</div>
+    </a>
+    <a class="card" href="02-swap-checklist.html">
+      <div class="num">DIRECTION 2</div>
+      <div class="ttl">Swap checklist <span class="best">most actionable</span></div>
+      <div class="desc">Turns the diff into a to-do list: Add / Remove / Tweak, with checkboxes and a progress bar. Best for actually copying a build step by step.</div>
+    </a>
+    <a class="card" href="03-dashboard-cards.html">
+      <div class="num">DIRECTION 3</div>
+      <div class="ttl">Dashboard + scoreboard</div>
+      <div class="desc">Top scoreboard of totals, then compact category cards (defenses, offense, skills as chips). Best at-a-glance overview.</div>
+    </a>
+    <a class="card" href="04-stat-bars.html">
+      <div class="num">DIRECTION 4</div>
+      <div class="ttl">Visual bars + skill matrix</div>
+      <div class="desc">Stats as paired bars (bigger bar wins), skills as a left/center/right matrix. Most visual — no reading numbers required.</div>
+    </a>
+  </div>
+  <h1 style="margin-top:36px">Hybrid + full character sheet</h1>
+  <p class="sub">Scoreboard + complete PoE2 stat panel (STR/DEX/INT, resistances, defences, offence) + swap checklist — four UI treatments of the same idea.</p>
+  <div class="grid">
+    <a class="card" href="05-hybrid.html">
+      <div class="num">HYBRID · BASE</div>
+      <div class="ttl">Stat rows + checklist <span class="best">recommended</span></div>
+      <div class="desc">Full character sheet as side-by-side rows with bars and a Δ column; winning side highlighted. Swap checklist on the right.</div>
+    </a>
+    <a class="card" href="06-hybrid-tabbed-dense.html">
+      <div class="num">HYBRID · A</div>
+      <div class="ttl">Tabbed dense grid</div>
+      <div class="desc">Two-stats-per-row compact grid so the whole sheet fits without scrolling. Tabs for Sheet / Skills / Passives. Left-border colour shows who leads.</div>
+    </a>
+    <a class="card" href="07-hybrid-diverging-bars.html">
+      <div class="num">HYBRID · B</div>
+      <div class="ttl">Diverging tug-of-war bars</div>
+      <div class="desc">Each stat is one bar growing out from a centre line — mine left, target right. The dominant side is obvious at a glance.</div>
+    </a>
+    <a class="card" href="08-hybrid-tiles.html">
+      <div class="num">HYBRID · C</div>
+      <div class="ttl">Tile dashboard (PoE skin)</div>
+      <div class="desc">Stat groups as gold-trimmed cards with "mine / target / tied" verdicts. Warmer in-game aesthetic.</div>
+    </a>
+  </div>
+
+  <p class="note">These are static HTML mockups in <code>design/compare-mockups/</code> — separate from the live app. Once you pick a direction (or a mix), I'll build it into the real <code>BuildCompare</code> / <code>DiffView</code> React components.</p>
+</div>
+</body>
+</html>

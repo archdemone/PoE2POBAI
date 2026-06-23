@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Compare — Dashboard Cards (Mockup 3)</title>
+<style>
+  :root{
+    --bg:#0e1015; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --text:#e7e9ee; --muted:#8b93a7; --gold:#c8aa6e;
+    --good:#54d98c; --good-bg:#13301f; --bad:#f0616d; --bad-bg:#34161a;
+    --warn:#f4c152; --warn-bg:#3a2f12;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1a1f2b,var(--bg));color:var(--text);
+    font:15px/1.45 "Segoe UI",system-ui,sans-serif;padding:28px 20px 60px}
+  .wrap{max-width:1080px;margin:0 auto}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+  .topbar h1{font-size:18px;margin:0;font-weight:600}
+  .topbar .tag{color:var(--muted);font-size:12px}
+
+  .hero{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center;margin-bottom:18px}
+  .hb{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px}
+  .hb.r{text-align:right}
+  .hb .role{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted)}
+  .hb .name{font-size:19px;font-weight:700}
+  .hb .sub{color:var(--muted);font-size:13px}
+  .hb .lvl{font-size:13px;color:var(--gold)}
+  .vsdot{width:40px;height:40px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);
+    color:var(--gold);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:12px}
+
+  .score{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px}
+  .sc{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center}
+  .sc .big{font-size:26px;font-weight:800}
+  .sc .lab{color:var(--muted);font-size:12px;margin-top:2px}
+  .sc.add .big{color:var(--good)} .sc.rem .big{color:var(--bad)} .sc.chg .big{color:var(--warn)} .sc.ok .big{color:var(--muted)}
+
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column}
+  .card.full{grid-column:1 / -1}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:1.2px;color:var(--gold);margin:0 0 12px;display:flex;align-items:center;gap:8px}
+  .card h2 .n{margin-left:auto;color:var(--muted);font-size:12px;letter-spacing:0;text-transform:none}
+
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;text-align:right;padding:0 0 8px}
+  th:first-child{text-align:left}
+  td{padding:7px 0;border-top:1px solid var(--line);text-align:right}
+  td:first-child{text-align:left;color:var(--muted)}
+  .mine{font-weight:600}
+  .theirs{font-weight:700}
+  .d{display:inline-block;min-width:54px;text-align:right;font-weight:700;font-size:13px}
+  .up{color:var(--good)} .down{color:var(--bad)} .same{color:#5b6373}
+
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{display:flex;align-items:center;gap:7px;padding:7px 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);font-size:13px;font-weight:600}
+  .chip .t{font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:1px 6px;border-radius:5px}
+  .chip.add{border-color:#2c5e41}.chip.add .t{background:var(--good-bg);color:var(--good)}
+  .chip.rem{border-color:#5e2c33}.chip.rem .t{background:var(--bad-bg);color:var(--bad)}
+  .chip.chg{border-color:#5e5326}.chip.chg .t{background:var(--warn-bg);color:var(--warn)}
+  .chip.ok{opacity:.7}.chip.ok .t{background:#20242d;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar"><h1>Comparison Dashboard</h1><span class="tag">Mockup 3 · Scoreboard + category cards</span></div>
+
+  <div class="hero">
+    <div class="hb"><div class="role">My build</div><div class="name">Dconnic_Monka</div><div class="sub">Monk · Martial Artist · <span class="lvl">Lv 91</span></div></div>
+    <div class="vsdot">VS</div>
+    <div class="hb r"><div class="role">Build to copy</div><div class="name">Target Guide</div><div class="sub">Monk · Martial Artist · <span class="lvl">Lv 96</span></div></div>
+  </div>
+
+  <div class="score">
+    <div class="sc add"><div class="big">1</div><div class="lab">skills to add</div></div>
+    <div class="sc rem"><div class="big">1</div><div class="lab">skills to drop</div></div>
+    <div class="sc chg"><div class="big">10</div><div class="lab">gem tweaks</div></div>
+    <div class="sc ok"><div class="big">+18</div><div class="lab">passive nodes</div></div>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <h2>Defenses <span class="n">5 differ</span></h2>
+      <table>
+        <tr><th>Stat</th><th>Mine</th><th>Δ</th><th>Target</th></tr>
+        <tr><td>Life</td><td class="mine">3,200</td><td><span class="d up">+650</span></td><td class="theirs">3,850</td></tr>
+        <tr><td>Energy Shield</td><td class="mine">1,100</td><td><span class="d up">+300</span></td><td class="theirs">1,400</td></tr>
+        <tr><td>Chaos Res</td><td class="mine">−12%</td><td><span class="d up">+34</span></td><td class="theirs">+22%</td></tr>
+        <tr><td>Cold Res</td><td class="mine">68%</td><td><span class="d up">+7</span></td><td class="theirs">75%</td></tr>
+        <tr><td>Fire Res</td><td class="mine">75%</td><td><span class="d same">=</span></td><td class="theirs">75%</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Offense <span class="n">all up</span></h2>
+      <table>
+        <tr><th>Stat</th><th>Mine</th><th>Δ</th><th>Target</th></tr>
+        <tr><td>Total DPS</td><td class="mine">1.20M</td><td><span class="d up">+50%</span></td><td class="theirs">1.80M</td></tr>
+        <tr><td>Crit Chance</td><td class="mine">42%</td><td><span class="d up">+9</span></td><td class="theirs">51%</td></tr>
+        <tr><td>Attack Speed</td><td class="mine">4.1</td><td><span class="d up">+0.6</span></td><td class="theirs">4.7</td></tr>
+        <tr><td>Accuracy</td><td class="mine">92%</td><td><span class="d same">=</span></td><td class="theirs">92%</td></tr>
+      </table>
+    </div>
+
+    <div class="card full">
+      <h2>Skills <span class="n">13 groups · 3 identical</span></h2>
+      <div class="chips">
+        <span class="chip add"><span class="t">add</span>Refutation</span>
+        <span class="chip rem"><span class="t">drop</span>Mace Strike</span>
+        <span class="chip chg"><span class="t">tweak</span>Wind Dancer</span>
+        <span class="chip chg"><span class="t">tweak</span>Blasphemy</span>
+        <span class="chip chg"><span class="t">tweak</span>Spirit Vessel</span>
+        <span class="chip chg"><span class="t">tweak</span>Skeletal Storm Mage</span>
+        <span class="chip chg"><span class="t">tweak</span>Elemental Weakness</span>
+        <span class="chip chg"><span class="t">tweak</span>Ghost Dance</span>
+        <span class="chip chg"><span class="t">tweak</span>Skeletal Cleric</span>
+        <span class="chip chg"><span class="t">tweak</span>Skeletal Reaver</span>
+        <span class="chip ok"><span class="t">same</span>Pain Offering</span>
+        <span class="chip ok"><span class="t">same</span>Verisium Manifestations</span>
+        <span class="chip ok"><span class="t">same</span>Purity of Fire</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

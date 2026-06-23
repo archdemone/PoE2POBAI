@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * PoBAI file watcher — monitors your PoB2 Builds directory and automatically
- * imports any build you save in PoB2. Pairs with the web UI at localhost:5173.
+ * imports any build you save in PoB2. Pairs with the web UI at localhost:3001.
  *
  * Usage:
  *   node integrations/pob2-addon/watch.mjs

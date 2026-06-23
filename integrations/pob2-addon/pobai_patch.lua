@@ -30,7 +30,7 @@ REQUIREMENTS
 -- ============================================================
 
 local POBAI_SERVER = "http://localhost:3001"
-local POBAI_UI     = "http://localhost:5173"
+local POBAI_UI     = "http://localhost:3001"
 
 local function pobai_openBrowser(url)
     -- PoB2 provides launch:OpenURL on all platforms
@@ -96,4 +96,4 @@ controls.sendToPoBAI = new("ButtonControl",
         pobai_sendBuild(self.build)
     end
 )
-controls.sendToPoBAI.tooltipText = "Export this build to PoBAI for AI build advice (opens localhost:5173)"
+controls.sendToPoBAI.tooltipText = "Export this build to PoBAI for AI build advice (opens localhost:3001)"

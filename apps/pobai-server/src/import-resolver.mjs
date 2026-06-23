@@ -10,22 +10,15 @@
  * Pure and side-effect free (no server state) so it can be unit-tested. The
  * poe2-mcp bridge and fetch are injected via options for testability.
  */
-import { inflateSync, inflateRawSync } from "node:zlib";
+// PoB export codes are URL-safe base64 of zlib-compressed XML. Use the shared
+// parser decoder, which tolerates codes that lost their trailing checksum byte
+// in copy-paste (a common real-world failure) instead of rejecting them.
+import { decodePobCode } from "@pobai/parser";
+
+export { decodePobCode };
 
 /** Thrown when a payload can't be resolved; message is user-facing. */
 export class ImportError extends Error {}
-
-// PoB export codes are URL-safe base64 of zlib-compressed XML.
-// Try zlib (RFC 1950) first, then raw deflate as a fallback.
-export function decodePobCode(code) {
-  const normalized = code.trim().replace(/-/g, "+").replace(/_/g, "/");
-  const buf = Buffer.from(normalized, "base64");
-  try {
-    return inflateSync(buf).toString("utf8");
-  } catch {
-    return inflateRawSync(buf).toString("utf8");
-  }
-}
 
 export function looksLikePobXml(text) {
   return /^\s*</.test(text) && /PathOfBuilding/i.test(text);

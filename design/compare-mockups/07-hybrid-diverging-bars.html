@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Compare — Hybrid Variant B (Diverging tug-of-war bars)</title>
+<style>
+  :root{
+    --bg:#090b10; --panel:#13161e; --panel2:#1a1e27; --line:#272c37;
+    --text:#eaecf2; --muted:#828aa0; --gold:#d4b878;
+    --mine:#4aa3ee; --mineDk:#16324a;
+    --theirs:#e6a94a; --theirsDk:#3a2c12;
+    --good:#5ce08f; --bad:#f26573; --warn:#f4c152;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(900px 500px at 50% -8%,#161b27,var(--bg));color:var(--text);
+    font:14.5px/1.4 "Segoe UI",system-ui,sans-serif;padding:26px 20px 60px}
+  .wrap{max-width:1000px;margin:0 auto}
+  .topbar{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px}
+  .topbar h1{font-size:18px;margin:0}
+  .topbar .tag{color:var(--muted);font-size:12px}
+
+  .head{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-bottom:14px;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+  .head .b{padding:13px 18px;background:var(--panel)}
+  .head .b.m{border-bottom:2px solid var(--mine)}
+  .head .b.t{text-align:right;border-bottom:2px solid var(--theirs)}
+  .head .role{font-size:10.5px;text-transform:uppercase;letter-spacing:1.4px;color:var(--muted)}
+  .head .name{font-size:18px;font-weight:700}
+  .head .b.m .name{color:var(--mine)} .head .b.t .name{color:var(--theirs)}
+  .head .sub{color:var(--muted);font-size:12.5px}
+
+  .score{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+  .sc{flex:1;min-width:96px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 12px;text-align:center}
+  .sc .big{font-size:21px;font-weight:800}.sc .lab{color:var(--muted);font-size:11px}
+  .sc.add .big{color:var(--good)}.sc.rem .big{color:var(--bad)}.sc.chg .big{color:var(--warn)}.sc.node .big{color:var(--gold)}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:16px}
+  .panel h2{font-size:12.5px;text-transform:uppercase;letter-spacing:1.2px;color:var(--gold);margin:0 0 6px}
+  .axis{display:grid;grid-template-columns:1fr 150px 1fr;font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding-bottom:8px;border-bottom:1px dashed var(--line);margin-bottom:8px}
+  .axis .l{color:var(--mine)} .axis .c{text-align:center} .axis .r{text-align:right;color:var(--theirs)}
+
+  .grp{font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:700;margin:14px 0 4px}
+  .bar{display:grid;grid-template-columns:1fr 150px 1fr;align-items:center;gap:0;padding:3px 0}
+  .lside{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+  .rside{display:flex;align-items:center;gap:8px}
+  .val{font-weight:700;font-size:14px;width:54px}
+  .lside .val{text-align:right} .rside .val{text-align:left}
+  .track{position:relative;height:16px;background:#0a0c11;border-radius:8px;border:1px solid #20242d;overflow:hidden}
+  .track::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:#39404d}
+  .fillM{position:absolute;right:50%;top:0;bottom:0;background:linear-gradient(90deg,#1d4f78,var(--mine));border-radius:8px 0 0 8px}
+  .fillT{position:absolute;left:50%;top:0;bottom:0;background:linear-gradient(90deg,var(--theirs),#7a5c20);border-radius:0 8px 8px 0}
+  .name{position:absolute;left:50%;transform:translateX(-50%);font-size:10.5px;color:#cfd4e0;z-index:2;white-space:nowrap;top:50%;margin-top:-7px;text-shadow:0 1px 2px #000}
+  .dwrap{display:flex;justify-content:center}
+  .d{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:20px;margin-left:6px}
+  .up{color:var(--good);background:#10301f}.down{color:var(--bad);background:#341519}.eq{color:var(--muted);background:#22262f}
+  .resbad{color:var(--bad)}.resok{color:var(--good)}
+
+  /* checklist */
+  .ck{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  .ck .c h4{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.8px}
+  .ck .addh h4{color:var(--good)}.ck .remh h4{color:var(--bad)}.ck .chgh h4{color:var(--warn)}
+  .t2{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:8px 11px;margin-bottom:6px;font-weight:600;font-size:13px}
+  .t2 small{display:block;color:var(--muted);font-weight:400;font-size:11px}
+  .more{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar"><h1>Build Comparison</h1><span class="tag">Variant B · Diverging tug-of-war bars</span></div>
+
+  <div class="head">
+    <div class="b m"><div class="role">My build</div><div class="name">Dconnic_Monka</div><div class="sub">Monk · Martial Artist · Lv 91</div></div>
+    <div class="b t"><div class="role">Build to copy</div><div class="name">Target Guide</div><div class="sub">Monk · Martial Artist · Lv 96</div></div>
+  </div>
+
+  <div class="score">
+    <div class="sc add"><div class="big">1</div><div class="lab">add</div></div>
+    <div class="sc rem"><div class="big">1</div><div class="lab">drop</div></div>
+    <div class="sc chg"><div class="big">10</div><div class="lab">tweak</div></div>
+    <div class="sc node"><div class="big">+18</div><div class="lab">passives</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Character stats — longer bar wins each tug-of-war</h2>
+    <div class="axis"><span class="l">◀ my build</span><span class="c">stat</span><span class="r">target ▶</span></div>
+
+    <div class="grp">Attributes</div>
+    <div class="bar"><div class="lside"><span class="val">182</span></div><div class="track"><div class="fillM" style="width:43%"></div><div class="fillT" style="width:50%"></div><span class="name">STR</span></div><div class="rside"><span class="val">211</span><span class="d up">+29</span></div></div>
+    <div class="bar"><div class="lside"><span class="val">240</span></div><div class="track"><div class="fillM" style="width:50%"></div><div class="fillT" style="width:47%"></div><span class="name">DEX</span></div><div class="rside"><span class="val">226</span><span class="d down">−14</span></div></div>
+    <div class="bar"><div class="lside"><span class="val">98</span></div><div class="track"><div class="fillM" style="width:39%"></div><div class="fillT" style="width:50%"></div><span class="name">INT</span></div><div class="rside"><span class="val">124</span><span class="d up">+26</span></div></div>
+
+    <div class="grp">Life &amp; resources</div>
+    <div class="bar"><div class="lside"><span class="val">3.2k</span></div><div class="track"><div class="fillM" style="width:42%"></div><div class="fillT" style="width:50%"></div><span class="name">Life</span></div><div class="rside"><span class="val">3.85k</span><span class="d up">+650</span></div></div>
+    <div class="bar"><div class="lside"><span class="val">1.1k</span></div><div class="track"><div class="fillM" style="width:39%"></div><div class="fillT" style="width:50%"></div><span class="name">Energy Shield</span></div><div class="rside"><span class="val">1.4k</span><span class="d up">+300</span></div></div>
+    <div class="bar"><div class="lside"><span class="val">100</span></div><div class="track"><div class="fillM" style="width:33%"></div><div class="fillT" style="width:50%"></div><span class="name">Spirit</span></div><div class="rside"><span class="val">150</span><span class="d up">+50</span></div></div>
+
+    <div class="grp">Resistances (cap 75%)</div>
+    <div class="bar"><div class="lside"><span class="val resbad">68%</span></div><div class="track"><div class="fillM" style="width:45%"></div><div class="fillT" style="width:50%"></div><span class="name">Cold</span></div><div class="rside"><span class="val resok">75%</span><span class="d up">+7</span></div></div>
+    <div class="bar"><div class="lside"><span class="val resbad">−12%</span></div><div class="track"><div class="fillM" style="width:8%"></div><div class="fillT" style="width:40%"></div><span class="name">Chaos</span></div><div class="rside"><span class="val resok">+22%</span><span class="d up">+34</span></div></div>
+    <div class="bar"><div class="lside"><span class="val resok">75%</span></div><div class="track"><div class="fillM" style="width:50%"></div><div class="fillT" style="width:50%"></div><span class="name">Fire · Light</span></div><div class="rside"><span class="val resok">75%</span><span class="d eq">=</span></div></div>
+
+    <div class="grp">Defences</div>
+    <div class="bar"><div class="lside"><span class="val">8.4k</span></div><div class="track"><div class="fillM" style="width:37%"></div><div class="fillT" style="width:50%"></div><span class="name">Armour</span></div><div class="rside"><span class="val">11.4k</span><span class="d up">+3.0k</span></div></div>
+    <div class="bar"><div class="lside"><span class="val">14.9k</span></div><div class="track"><div class="fillM" style="width:50%"></div><div class="fillT" style="width:46%"></div><span class="name">Evasion</span></div><div class="rside"><span class="val">13.7k</span><span class="d down">−1.2k</span></div></div>
+    <div class="bar"><div class="lside"><span class="val">25%</span></div><div class="track"><div class="fillM" style="width:36%"></div><div class="fillT" style="width:50%"></div><span class="name">Block</span></div><div class="rside"><span class="val">35%</span><span class="d up">+10</span></div></div>
+    <div class="bar"><div class="lside"><span class="val">42%</span></div><div class="track"><div class="fillM" style="width:40%"></div><div class="fillT" style="width:50%"></div><span class="name">Phys Reduction</span></div><div class="rside"><span class="val">53%</span><span class="d up">+11</span></div></div>
+
+    <div class="grp">Offence</div>
+    <div class="bar"><div class="lside"><span class="val">1.2M</span></div><div class="track"><div class="fillM" style="width:33%"></div><div class="fillT" style="width:50%"></div><span class="name">Total DPS</span></div><div class="rside"><span class="val">1.8M</span><span class="d up">+50%</span></div></div>
+    <div class="bar"><div class="lside"><span class="val">42%</span></div><div class="track"><div class="fillM" style="width:41%"></div><div class="fillT" style="width:50%"></div><span class="name">Crit Chance</span></div><div class="rside"><span class="val">51%</span><span class="d up">+9</span></div></div>
+    <div class="bar"><div class="lside"><span class="val">4.1</span></div><div class="track"><div class="fillM" style="width:44%"></div><div class="fillT" style="width:50%"></div><span class="name">Attack Speed</span></div><div class="rside"><span class="val">4.7</span><span class="d up">+0.6</span></div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Swap checklist</h2>
+    <div class="ck">
+      <div class="c addh"><h4>＋ Add (1)</h4><div class="t2">Refutation<small>new skill group</small></div><div class="t2">+18 passives<small>allocate</small></div></div>
+      <div class="c remh"><h4>－ Drop (1)</h4><div class="t2">Mace Strike<small>remove group</small></div><div class="t2">−3 passives<small>refund</small></div></div>
+      <div class="c chgh"><h4>↑ Tweak (10)</h4><div class="t2">Wind Dancer<small>6 → 3 gems</small></div><div class="t2">Blasphemy<small>+Magnified Area</small></div><div class="more">+ 8 more…</div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

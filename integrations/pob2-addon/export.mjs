@@ -5,7 +5,7 @@
  * Usage:
  *   node export.mjs
  *   node export.mjs --builds-dir "C:\custom\path\Builds"
- *   node export.mjs --server http://localhost:3001 --ui http://localhost:5173
+ *   node export.mjs --server http://localhost:3001 --ui http://localhost:3001
  *   node export.mjs --label "My Twister" --pick 2   (non-interactive, pick build #2)
  *
  * Requirements: Node.js >= 22 (no npm install needed)
@@ -92,7 +92,7 @@ const { values: args } = parseArgs({
   options: {
     "builds-dir": { type: "string" },
     server: { type: "string", default: "http://localhost:3001" },
-    ui: { type: "string", default: "http://localhost:5173" },
+    ui: { type: "string", default: "http://localhost:3001" },
     label: { type: "string" },
     pick: { type: "string" }, // non-interactive: pick build by number
   },

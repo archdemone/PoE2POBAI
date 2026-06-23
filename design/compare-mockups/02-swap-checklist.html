@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Compare — Swap Checklist (Mockup 2)</title>
+<style>
+  :root{
+    --bg:#0e1015; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --text:#e7e9ee; --muted:#8b93a7; --gold:#c8aa6e;
+    --good:#54d98c; --good-bg:#13301f; --bad:#f0616d; --bad-bg:#34161a;
+    --warn:#f4c152; --warn-bg:#3a2f12;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1a1f2b,var(--bg));color:var(--text);
+    font:15px/1.45 "Segoe UI",system-ui,sans-serif;padding:28px 20px 60px}
+  .wrap{max-width:980px;margin:0 auto}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+  .topbar h1{font-size:18px;margin:0;font-weight:600}
+  .topbar .tag{color:var(--muted);font-size:12px}
+
+  .ids{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:14px 18px;margin-bottom:14px}
+  .ids .b{flex:1}
+  .ids .role{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted)}
+  .ids .name{font-size:18px;font-weight:700}
+  .ids .sub{color:var(--muted);font-size:13px}
+  .ids .arrow{color:var(--gold);font-size:22px}
+  .ids .b.right{text-align:right}
+
+  .progress{display:flex;align-items:center;gap:12px;margin-bottom:22px;color:var(--muted);font-size:13px}
+  .pbar{flex:1;height:8px;background:#0c0e12;border-radius:5px;overflow:hidden;border:1px solid var(--line)}
+  .pfill{height:100%;width:18%;background:linear-gradient(90deg,#2f8f5a,var(--good))}
+
+  .group{margin-bottom:22px}
+  .ghead{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+  .ghead .ic{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px}
+  .ghead h2{font-size:15px;margin:0;font-weight:700}
+  .ghead .n{color:var(--muted);font-size:13px;margin-left:auto}
+  .ic.add{background:var(--good-bg);color:var(--good)}
+  .ic.rem{background:var(--bad-bg);color:var(--bad)}
+  .ic.up{background:var(--warn-bg);color:var(--warn)}
+
+  .task{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);
+    border-left-width:3px;border-radius:8px;padding:11px 14px;margin-bottom:7px}
+  .task.add{border-left-color:var(--good)}
+  .task.rem{border-left-color:var(--bad)}
+  .task.up{border-left-color:var(--warn)}
+  .chk{width:18px;height:18px;border-radius:5px;border:2px solid var(--line);flex:none}
+  .task .main{font-weight:600}
+  .task .detail{color:var(--muted);font-size:12.5px;margin-top:1px}
+  .task .side{margin-left:auto;text-align:right;font-size:12.5px;display:flex;gap:18px;align-items:center}
+  .pill{padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600}
+  .pill.from{background:var(--bad-bg);color:#f0a0a6}
+  .pill.to{background:var(--good-bg);color:#9be9bc}
+  .pill.mut{background:#20242d;color:var(--muted)}
+  .conn{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar"><h1>Swap Checklist</h1><span class="tag">Mockup 2 · Action-oriented to-do list</span></div>
+
+  <div class="ids">
+    <div class="b"><div class="role">From — my build</div><div class="name">Dconnic_Monka</div><div class="sub">Monk · Martial Artist · Lv 91</div></div>
+    <div class="arrow">→</div>
+    <div class="b right"><div class="role">To — build to copy</div><div class="name">Target Guide</div><div class="sub">Monk · Martial Artist · Lv 96</div></div>
+  </div>
+
+  <div class="progress">
+    <span>0 / 12 done</span>
+    <div class="pbar"><div class="pfill"></div></div>
+    <span>3 skills identical already ✓</span>
+  </div>
+
+  <div class="group">
+    <div class="ghead"><span class="ic add">+</span><h2>Add to your build</h2><span class="n">1 skill · 18 passives</span></div>
+    <div class="task add"><span class="chk"></span><div><div class="main">Refutation</div><div class="detail">New skill group — Refutation · Cooldown Recovery II · Prolonged Duration II</div></div><div class="side"><span class="pill to">add group</span></div></div>
+    <div class="task add"><span class="chk"></span><div><div class="main">Allocate 18 passive nodes</div><div class="detail">Mostly along the Martial Artist + Resolve clusters</div></div><div class="side"><span class="pill to">+18 pts</span></div></div>
+  </div>
+
+  <div class="group">
+    <div class="ghead"><span class="ic rem">−</span><h2>Remove from your build</h2><span class="n">1 skill · 3 passives</span></div>
+    <div class="task rem"><span class="chk"></span><div><div class="main">Mace Strike</div><div class="detail">Not used by the target build — free up the sockets</div></div><div class="side"><span class="pill from">drop group</span></div></div>
+    <div class="task rem"><span class="chk"></span><div><div class="main">Refund 3 passive nodes</div><div class="detail">Old life-on-hit cluster the target skips</div></div><div class="side"><span class="pill from">−3 pts</span></div></div>
+  </div>
+
+  <div class="group">
+    <div class="ghead"><span class="ic up">↑</span><h2>Tweak gems</h2><span class="n">10 skill groups</span></div>
+    <div class="task up"><span class="chk"></span><div><div class="main">Wind Dancer</div><div class="detail">Slim the support setup</div></div><div class="side"><span class="pill from">6 gems</span><span class="conn">→</span><span class="pill to">3 gems</span></div></div>
+    <div class="task up"><span class="chk"></span><div><div class="main">Blasphemy</div><div class="detail">Add Magnified Area II support</div></div><div class="side"><span class="pill mut">+1 gem</span></div></div>
+    <div class="task up"><span class="chk"></span><div><div class="main">Spirit Vessel</div><div class="detail">Swap Salvo for Nova Projectiles; +1 level</div></div><div class="side"><span class="pill mut">2 changes</span></div></div>
+    <div class="task up"><span class="chk"></span><div><div class="main">Skeletal Storm Mage</div><div class="detail">Reorder supports, +2 gem levels</div></div><div class="side"><span class="pill mut">levels</span></div></div>
+    <div class="task up" style="opacity:.6"><span class="chk"></span><div><div class="main">+ 6 more minor gem tweaks…</div></div><div class="side"><span class="pill mut">expand</span></div></div>
+  </div>
+</div>
+</body>
+</html>

@@ -76,6 +76,88 @@ describe("parseBuildXml — character", () => {
   });
 });
 
+describe("real PoB2 export quirks", () => {
+  it("parses skills with self-closing gems and no </Skill> close tags", () => {
+    // Real PoB2 exports omit </Skill> and use self-closing <Gem .../> children.
+    const xml = `<PathOfBuilding2><Build className="Monk" level="90"/>
+      <Skills><SkillSet id="1">
+        <Skill enabled="true" mainActiveSkill="1">
+          <Gem nameSpec="Ice Strike" level="20" quality="20"/>
+          <Gem nameSpec="Martial Tempo" level="18"/>
+        <Skill enabled="true">
+          <Gem nameSpec="Bell" level="19"/>
+      </SkillSet></Skills></PathOfBuilding2>`;
+    const skills = parseBuildXml(xml).skills;
+    expect(skills).toHaveLength(2);
+    expect(skills[0].gems.map((g) => g.name)).toEqual(["Ice Strike", "Martial Tempo"]);
+    expect(skills[1].gems.map((g) => g.name)).toEqual(["Bell"]);
+  });
+
+  it("decodes a PoB code whose trailing checksum was lost in copy-paste", () => {
+    const xml = `<PathOfBuilding2><Build className="Monk" level="90"/></PathOfBuilding2>`;
+    const full = deflateSync(Buffer.from(xml, "utf8"));
+    const truncated = full.subarray(0, full.length - 4); // drop the Adler-32 check
+    const code = truncated.toString("base64").replace(/\+/g, "-").replace(/\//g, "_");
+    expect(decodePobCode(code)).toContain("PathOfBuilding");
+  });
+});
+
+describe("parseBuildXml — item affixes", () => {
+  // Real PoB exports store items as raw clipboard text anchored on a "Rarity:" line.
+  const RARE_ITEM_XML = `<PathOfBuilding2>
+    <Build characterName="Modder" className="Witch" level="80" />
+    <Item id="1" slot="Body Armour">Rarity: RARE
+Doom Shell
+Expert Vaal Cuirass
+Item Level: 82
+Quality: +20
+Sockets: R-R-G
++45 to maximum Life
++38% to Fire Resistance
+{crafted}+12% to Cold Resistance</Item>
+  </PathOfBuilding2>`;
+
+  it("extracts item level, quality, and sockets", () => {
+    const item = parseBuildXml(RARE_ITEM_XML).items[0];
+    expect(item.itemLevel).toBe("82");
+    expect(item.quality).toBe("20");
+    expect(item.sockets).toBe("R-R-G");
+  });
+
+  it("extracts affix mods and strips crafting tags", () => {
+    const item = parseBuildXml(RARE_ITEM_XML).items[0];
+    expect(item.mods).toContain("+45 to maximum Life");
+    expect(item.mods).toContain("+38% to Fire Resistance");
+    expect(item.mods).toContain("+12% to Cold Resistance");
+    expect(item.mods).not.toContain("Doom Shell");
+  });
+
+  it("leaves mods empty for subtag-style items without a Rarity anchor", () => {
+    const item = parseBuildXml(SAMPLE_XML).items[0];
+    expect(item.mods).toEqual([]);
+    expect(item.name).toBe("Smoke Bow");
+  });
+});
+
+describe("parseBuildXml — passive tree", () => {
+  it("reads allocated nodes from a Spec nodes attribute", () => {
+    const xml = `<PathOfBuilding2><Build className="Witch" level="80" />
+      <Spec treeVersion="0_5" nodes="4,55,52" masteryEffects="{12345,67}" /></PathOfBuilding2>`;
+    const tree = parseBuildXml(xml).passiveTree;
+    expect(tree.allocatedNodeIds).toEqual(["4", "55", "52"]);
+    expect(tree.allocatedNodeCount).toBe(3);
+    expect(tree.treeVersion).toBe("0_5");
+    expect(tree.masteryEffects).toEqual([{ node: "12345", effect: "67" }]);
+  });
+
+  it("still reads legacy <Node> tags and de-dupes against Spec nodes", () => {
+    const xml = `<PathOfBuilding2><Build className="Witch" />
+      <Spec nodes="100,200" /><Tree><Node id="200" /><Node id="300" /></Tree></PathOfBuilding2>`;
+    const tree = parseBuildXml(xml).passiveTree;
+    expect(tree.allocatedNodeIds).toEqual(["100", "200", "300"]);
+  });
+});
+
 describe("parseBuildXml — skills", () => {
   it("parses two skill groups", () => {
     const summary = parseBuildXml(SAMPLE_XML);

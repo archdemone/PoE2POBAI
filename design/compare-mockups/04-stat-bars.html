@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Compare — Visual Bars (Mockup 4)</title>
+<style>
+  :root{
+    --bg:#0e1015; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --text:#e7e9ee; --muted:#8b93a7; --gold:#c8aa6e;
+    --mine:#5aa9e6; --mine-bg:#16283a;
+    --theirs:#c8aa6e; --theirs-bg:#322a17;
+    --good:#54d98c; --bad:#f0616d; --warn:#f4c152;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1a1f2b,var(--bg));color:var(--text);
+    font:15px/1.45 "Segoe UI",system-ui,sans-serif;padding:28px 20px 60px}
+  .wrap{max-width:1000px;margin:0 auto}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+  .topbar h1{font-size:18px;margin:0;font-weight:600}
+  .topbar .tag{color:var(--muted);font-size:12px}
+
+  .key{display:flex;gap:20px;justify-content:center;margin-bottom:22px;font-size:13px}
+  .key b{font-weight:700}
+  .key .sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:6px}
+  .swm{background:var(--mine)} .swt{background:var(--theirs)}
+
+  .section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+  .section h2{font-size:13px;text-transform:uppercase;letter-spacing:1.2px;color:var(--gold);margin:0 0 16px}
+
+  .stat{margin-bottom:15px}
+  .stat .top{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px}
+  .stat .top .nm{color:var(--text);font-weight:600}
+  .stat .top .vals{color:var(--muted)}
+  .stat .top .vals b{color:var(--text)}
+  .stat .top .vals .win{color:var(--good);font-weight:700}
+  /* two stacked mini-bars sharing a scale */
+  .twin{display:grid;grid-template-columns:46px 1fr;gap:8px;align-items:center}
+  .twin .rl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);text-align:right}
+  .track{height:12px;background:#0c0e12;border-radius:6px;overflow:hidden;border:1px solid #23262f}
+  .fill{height:100%;border-radius:6px}
+  .fill.m{background:linear-gradient(90deg,#2f6f9e,var(--mine))}
+  .fill.t{background:linear-gradient(90deg,#8a7338,var(--theirs))}
+  .rowgap{height:4px}
+
+  .matrix{display:grid;grid-template-columns:1fr;gap:6px}
+  .mrow{display:grid;grid-template-columns:1fr 120px 1fr;align-items:center;gap:10px;
+    background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 12px}
+  .mrow .s-mine{text-align:right}
+  .mrow .s-theirs{text-align:left}
+  .mrow .name{text-align:center;font-size:12px;font-weight:700}
+  .tagpill{font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:2px 8px;border-radius:20px}
+  .t-add{background:#13301f;color:var(--good)}
+  .t-rem{background:#34161a;color:var(--bad)}
+  .t-chg{background:#3a2f12;color:var(--warn)}
+  .t-ok{background:#20242d;color:var(--muted)}
+  .has{color:var(--text);font-weight:600;font-size:13px}
+  .miss{color:#4a515f;font-style:italic;font-size:13px}
+  .dotm{color:var(--mine)} .dott{color:var(--theirs)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar"><h1>Visual Comparison</h1><span class="tag">Mockup 4 · Bars + skill matrix</span></div>
+
+  <div class="key">
+    <span><span class="sw swm"></span><b style="color:var(--mine)">Dconnic_Monka</b> — my build (Lv 91)</span>
+    <span><span class="sw swt"></span><b style="color:var(--theirs)">Target Guide</b> — to copy (Lv 96)</span>
+  </div>
+
+  <div class="section">
+    <h2>Defenses &amp; offense — bigger bar wins</h2>
+
+    <div class="stat">
+      <div class="top"><span class="nm">Life</span><span class="vals"><b>3,200</b> vs <b>3,850</b> · <span class="win">target +650</span></span></div>
+      <div class="twin"><span class="rl dotm">Mine</span><div class="track"><div class="fill m" style="width:83%"></div></div></div>
+      <div class="rowgap"></div>
+      <div class="twin"><span class="rl dott">Target</span><div class="track"><div class="fill t" style="width:100%"></div></div></div>
+    </div>
+
+    <div class="stat">
+      <div class="top"><span class="nm">Total DPS</span><span class="vals"><b>1.20M</b> vs <b>1.80M</b> · <span class="win">target +50%</span></span></div>
+      <div class="twin"><span class="rl dotm">Mine</span><div class="track"><div class="fill m" style="width:67%"></div></div></div>
+      <div class="rowgap"></div>
+      <div class="twin"><span class="rl dott">Target</span><div class="track"><div class="fill t" style="width:100%"></div></div></div>
+    </div>
+
+    <div class="stat">
+      <div class="top"><span class="nm">Energy Shield</span><span class="vals"><b>1,100</b> vs <b>1,400</b> · <span class="win">target +300</span></span></div>
+      <div class="twin"><span class="rl dotm">Mine</span><div class="track"><div class="fill m" style="width:78%"></div></div></div>
+      <div class="rowgap"></div>
+      <div class="twin"><span class="rl dott">Target</span><div class="track"><div class="fill t" style="width:100%"></div></div></div>
+    </div>
+
+    <div class="stat">
+      <div class="top"><span class="nm">Chaos Resist</span><span class="vals"><b>−12%</b> vs <b>+22%</b> · <span class="win">target +34</span></span></div>
+      <div class="twin"><span class="rl dotm">Mine</span><div class="track"><div class="fill m" style="width:0%"></div></div></div>
+      <div class="rowgap"></div>
+      <div class="twin"><span class="rl dott">Target</span><div class="track"><div class="fill t" style="width:55%"></div></div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Skill matrix — who runs what</h2>
+    <div class="matrix">
+      <div class="mrow"><span class="s-mine has">Mace Strike</span><span class="name"><span class="tagpill t-rem">drop</span></span><span class="s-theirs miss">— not used —</span></div>
+      <div class="mrow"><span class="s-mine miss">— not used —</span><span class="name"><span class="tagpill t-add">add</span></span><span class="s-theirs has">Refutation</span></div>
+      <div class="mrow"><span class="s-mine has">Wind Dancer <span style="color:var(--muted)">· 6 gems</span></span><span class="name"><span class="tagpill t-chg">tweak</span></span><span class="s-theirs has">Wind Dancer <span style="color:var(--muted)">· 3 gems</span></span></div>
+      <div class="mrow"><span class="s-mine has">Blasphemy <span style="color:var(--muted)">· 5 gems</span></span><span class="name"><span class="tagpill t-chg">tweak</span></span><span class="s-theirs has">Blasphemy <span style="color:var(--muted)">· 6 gems</span></span></div>
+      <div class="mrow"><span class="s-mine has">Spirit Vessel</span><span class="name"><span class="tagpill t-chg">tweak</span></span><span class="s-theirs has">Spirit Vessel</span></div>
+      <div class="mrow"><span class="s-mine has">Pain Offering</span><span class="name"><span class="tagpill t-ok">same</span></span><span class="s-theirs has">Pain Offering</span></div>
+      <div class="mrow"><span class="s-mine has">Verisium Manifestations</span><span class="name"><span class="tagpill t-ok">same</span></span><span class="s-theirs has">Verisium Manifestations</span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
