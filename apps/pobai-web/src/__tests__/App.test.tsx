@@ -99,6 +99,47 @@ describe("App REST flows", () => {
     expect(body.messages).toEqual([{ role: "user", content: "How are my defenses?" }]);
   });
 
+  it("prefers the user's build as the initial compare base when a target build is older", async () => {
+    const compareBuilds = [
+      {
+        snapshot_id: "target",
+        label: "Build to compare",
+        source: "pob-code",
+        created_at: "2026-01-01T00:00:00.000Z",
+        character: { className: "Monk", ascendancy: "Martial Artist", level: "96" },
+      },
+      {
+        snapshot_id: "mine",
+        label: "My character",
+        source: "pob-code",
+        created_at: "2026-01-02T00:00:00.000Z",
+        character: { className: "Monk", ascendancy: "Martial Artist", level: "91" },
+      },
+    ];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/builds")) return jsonResponse(compareBuilds);
+      if (url.endsWith("/api/status")) return jsonResponse({ ok: true, pob2Bridge: { connected: false, url: "http://127.0.0.1:22804" } });
+      if (url.endsWith("/api/build/compare")) {
+        return jsonResponse({
+          statDiffs: [],
+          skills: { rows: [] },
+          items: { rows: [] },
+          passiveTree: { addedNodeIds: [], removedNodeIds: [] },
+        });
+      }
+      return jsonResponse({ error: "not found" }, 404);
+    });
+    globalThis.fetch = fetchMock;
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("1. My build") as HTMLSelectElement).value).toBe("mine");
+    });
+    expect((screen.getByLabelText("2. Build to copy") as HTMLSelectElement).value).toBe("target");
+  });
+
   it("sends a saved API key and model with chat requests", async () => {
     localStorage.clear();
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {

@@ -82,6 +82,14 @@ function normalizeToolTrace(trace: ToolTraceEntry[] | undefined): ToolCallState[
   });
 }
 
+function isLikelyPlayerBuild(build: BuildInfo): boolean {
+  return /\b(my|current)\b/i.test(build.label);
+}
+
+function selectInitialBuild(builds: BuildInfo[]): string | null {
+  return builds.find(isLikelyPlayerBuild)?.snapshot_id ?? builds[0]?.snapshot_id ?? null;
+}
+
 async function readErrorMessage(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { error?: unknown; detail?: unknown };
@@ -130,7 +138,7 @@ export function App() {
       setBuilds(nextBuilds);
       setActiveBuildId((current) => {
         if (current && nextBuilds.some((build) => build.snapshot_id === current)) return current;
-        return nextBuilds[0]?.snapshot_id ?? null;
+        return selectInitialBuild(nextBuilds);
       });
     } catch {}
   }

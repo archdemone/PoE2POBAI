@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { DiffView, type BuildCompareResult } from "./DiffView";
+import { StatSheet } from "./StatSheet";
 import type { BuildInfo } from "../types";
 
 interface BuildCompareProps {
@@ -33,38 +34,6 @@ async function readErrorMessage(res: Response): Promise<string> {
   return `Compare failed with ${res.status}`;
 }
 
-interface CompareSummary {
-  statsChanged: number;
-  statsMatched: number;
-  skills: number;
-  items: number;
-  nodesAdded: number;
-  nodesRemoved: number;
-}
-
-function summarize(comparison: BuildCompareResult | null): CompareSummary {
-  if (!comparison) return { statsChanged: 0, statsMatched: 0, skills: 0, items: 0, nodesAdded: 0, nodesRemoved: 0 };
-  const statList = Array.isArray(comparison.statDiffs)
-    ? comparison.statDiffs
-    : comparison.statDiffs
-      ? Object.values(comparison.statDiffs)
-      : Array.isArray(comparison.defenses?.stats)
-        ? comparison.defenses!.stats!
-        : [];
-  let statsChanged = 0;
-  let statsMatched = 0;
-  for (const stat of statList) {
-    if (stat?.status === "unchanged" || stat?.changed === false) continue;
-    if (stat?.near || stat?.status === "near") statsMatched += 1;
-    else statsChanged += 1;
-  }
-  const skills = (comparison.skills?.rows ?? []).filter((r) => r.status !== "unchanged").length;
-  const items = (comparison.items?.rows ?? []).filter((r) => r.status !== "unchanged").length;
-  const nodesAdded = comparison.passiveTree?.addedNodeIds?.length ?? 0;
-  const nodesRemoved = comparison.passiveTree?.removedNodeIds?.length ?? 0;
-  return { statsChanged, statsMatched, skills, items, nodesAdded, nodesRemoved };
-}
-
 export function BuildCompare({
   builds,
   activeBuildId,
@@ -77,6 +46,9 @@ export function BuildCompare({
 }: BuildCompareProps) {
   const buildIds = useMemo(() => builds.map((build) => build.snapshot_id), [builds]);
   const autoCompareKey = useRef("");
+  // Tracks which build ids we've already seen so we can tell a *freshly imported*
+  // build apart from ones that were already loaded.
+  const seenBuildIds = useRef<Set<string>>(new Set());
   const [baseId, setBaseId] = useState("");
   const [targetId, setTargetId] = useState("");
   const [comparison, setComparison] = useState<BuildCompareResult | null>(null);
@@ -97,19 +69,25 @@ export function BuildCompare({
     });
   }, [activeBuildId, buildIds]);
 
-  // "Build to copy" is any build that isn't the base; keep a valid manual choice.
+  // "Build to copy" is the build you want to copy. A *freshly imported* build (it
+  // becomes the active build) flows in here, even if a build was already selected —
+  // that's what makes re-importing the guide build actually refresh this slot.
+  // Otherwise we keep a valid manual choice, falling back to any non-base build.
   useEffect(() => {
+    const added = buildIds.filter((id) => !seenBuildIds.current.has(id));
+    seenBuildIds.current = new Set(buildIds);
     setTargetId((current) => {
+      const freshlyImported = added.find((id) => id === activeBuildId && id !== baseId);
+      if (freshlyImported) return freshlyImported;
       if (current && buildIds.includes(current) && current !== baseId) return current;
       return buildIds.find((id) => id !== baseId) ?? "";
     });
-  }, [baseId, buildIds]);
+  }, [activeBuildId, baseId, buildIds]);
 
   const baseBuild = builds.find((build) => build.snapshot_id === baseId);
   const targetBuild = builds.find((build) => build.snapshot_id === targetId);
   const bothLoaded = Boolean(baseId) && Boolean(targetId) && baseId !== targetId;
   const canCompare = bothLoaded && !loading;
-  const summary = useMemo(() => summarize(comparison), [comparison]);
 
   useEffect(() => {
     const key = `${baseId}:${targetId}:${buildIds.join(",")}`;
@@ -232,18 +210,11 @@ export function BuildCompare({
         {error && <div className="compare-error">{error}</div>}
       </div>
 
-      {/* Step 2 — differences overview */}
+      {/* Step 2 — character sheet overview */}
       {comparison && (
         <div className="compare-stage" ref={overviewRef}>
           <h4 className="stage-title">Step 2 — What's different</h4>
-          <div className="compare-scoreboard">
-            <ScoreCard value={summary.statsChanged} label="stats differ" tone="changed" />
-            <ScoreCard value={summary.statsMatched} label="stats matched" tone="matched" />
-            <ScoreCard value={summary.skills} label="skill groups" tone="changed" />
-            <ScoreCard value={summary.items} label="item slots" tone="changed" />
-            <ScoreCard value={summary.nodesAdded} label="nodes to add" tone="added" />
-            <ScoreCard value={summary.nodesRemoved} label="nodes to drop" tone="removed" />
-          </div>
+          <StatSheet diff={comparison} />
           <button className="btn-link" onClick={() => scrollTo(detailRef)}>See full swap checklist ↓</button>
         </div>
       )}
@@ -251,7 +222,7 @@ export function BuildCompare({
       {/* Step 3 — swap checklist */}
       <div className="compare-stage" ref={detailRef}>
         {loading && <div className="compare-hint">Comparing builds...</div>}
-        {!loading && comparison && <DiffView diff={comparison} />}
+        {!loading && comparison && <DiffView diff={comparison} showStats={false} />}
         {!loading && !comparison && bothLoaded && <div className="compare-hint">Comparison will appear here.</div>}
       </div>
     </section>
@@ -305,11 +276,3 @@ function BuildSummaryCard({ title, build }: { title: string; build: BuildInfo | 
   );
 }
 
-function ScoreCard({ value, label, tone }: { value: number; label: string; tone: "changed" | "matched" | "added" | "removed" }) {
-  return (
-    <div className={`score-card score-${tone}`}>
-      <span className="score-value">{value}</span>
-      <span className="score-label">{label}</span>
-    </div>
-  );
-}

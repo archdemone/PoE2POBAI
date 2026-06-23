@@ -32,12 +32,14 @@ describe("BuildCompare", () => {
     vi.restoreAllMocks();
   });
 
-  it("auto-posts selected builds and renders stat, skill, item, and passive differences", async () => {
+  it("auto-posts selected builds and renders the stat sheet plus skill, item, and passive differences", async () => {
     const fetchMock = vi.fn(async () => jsonResponse({
-      statDiffs: [
-        { label: "Life", baseValue: 1000, targetValue: 1250, delta: 250, changed: true, status: "changed", color: "green" },
-        { label: "Fire Resistance", baseRaw: "75%", targetRaw: "68%", delta: -7, changed: true, status: "changed", color: "red" },
-      ],
+      stats: {
+        rows: [
+          { key: "life", label: "Life", baseValue: 1000, targetValue: 1250, status: "changed" },
+          { key: "fireresist", label: "Fire", baseValue: 75, targetValue: 68, status: "changed" },
+        ],
+      },
       skills: {
         rows: [
           { key: "explosiveshot", status: "added", changed: true, base: null, target: { label: "Explosive Shot", gems: [{ name: "Explosive Shot" }, { name: "Martial Tempo" }] } },
@@ -54,9 +56,13 @@ describe("BuildCompare", () => {
 
     render(<BuildCompare builds={builds} activeBuildId="base" apiBaseUrl="http://localhost:3001" />);
 
+    // Stat sheet renders the curated character-sheet rows...
     expect(await screen.findByText("Life")).toBeTruthy();
-    expect(screen.getByText("1250").classList.contains("stat-positive")).toBe(true);
-    expect(screen.getByText("68%").classList.contains("stat-negative")).toBe(true);
+    expect(screen.getByText("Fire")).toBeTruthy();
+    // ...and the diverging bar for Life is the "target has more" (red) verdict.
+    const lifeRow = screen.getByText("Life").closest(".cmp-ds");
+    expect(lifeRow?.classList.contains("cmp-tg")).toBe(true);
+    // The detailed swap checklist (DiffView) still shows skills / items / passives.
     expect(screen.getByText("Explosive Shot")).toBeTruthy();
     expect(screen.getByText("Old Crossbow")).toBeTruthy();
     expect(screen.getByText("+4 nodes")).toBeTruthy();
@@ -99,6 +105,39 @@ describe("BuildCompare", () => {
     await waitFor(() => expect(targetSelect().value).toBe("B"));
     expect(baseSelect().value).toBe("A"); // still my build, not swapped
     expect(targetSelect().value).toBe("B"); // guide build is the one to copy
+  });
+
+  it("flows a freshly imported build into 'Build to copy' even when one is already selected", async () => {
+    // Reproduces the reported bug: a placeholder/guide build already sits in the
+    // compare-against slot, then the user imports the real guide build. The new
+    // build becomes the active build and must take over "Build to copy" — the old
+    // selection must not stick (which made re-importing look like a no-op).
+    const mine: BuildInfo = {
+      snapshot_id: "A", label: "My character", source: "pob-code", created_at: "2026-01-01T00:00:00.000Z",
+      character: { className: "Monk", ascendancy: "Martial Artist", level: "91" },
+    };
+    const placeholder: BuildInfo = {
+      snapshot_id: "B", label: "Build to compare", source: "pob-code", created_at: "2026-01-02T00:00:00.000Z",
+      character: { className: "Monk", ascendancy: "Martial Artist", level: "96" },
+    };
+    const realGuide: BuildInfo = {
+      snapshot_id: "C", label: "pob-code snapshot", source: "pob-code", created_at: "2026-01-03T00:00:00.000Z",
+      character: { className: "Sorceress", ascendancy: "Stormweaver", level: "94" },
+    };
+    globalThis.fetch = vi.fn(async () => jsonResponse({}));
+
+    const { rerender } = render(
+      <BuildCompare builds={[mine, placeholder]} activeBuildId="A" apiBaseUrl="http://localhost:3001" />,
+    );
+    const baseSelect = () => screen.getByLabelText("1. My build") as HTMLSelectElement;
+    const targetSelect = () => screen.getByLabelText("2. Build to copy") as HTMLSelectElement;
+    await waitFor(() => expect(targetSelect().value).toBe("B"));
+
+    // Import the real guide build -> it becomes the active build.
+    rerender(<BuildCompare builds={[mine, placeholder, realGuide]} activeBuildId="C" apiBaseUrl="http://localhost:3001" />);
+
+    await waitFor(() => expect(targetSelect().value).toBe("C"));
+    expect(baseSelect().value).toBe("A"); // my build stays pinned
   });
 
   it("exposes live PoB import when the bridge is connected", () => {

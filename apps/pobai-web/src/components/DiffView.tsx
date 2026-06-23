@@ -26,6 +26,7 @@ interface ItemChange {
 }
 
 interface StatChange {
+  key?: string;
   label?: string;
   from?: unknown;
   to?: unknown;
@@ -129,6 +130,7 @@ export interface BuildCompareResult {
   itemsChanged?: Array<ChangedPair<ItemChange>>;
   defensesChanged?: Record<string, StatChange>;
   defenses?: { stats?: StatChange[] };
+  stats?: { rows?: StatChange[]; counts?: Record<string, number>; changed?: boolean };
   statsChanged?: Record<string, StatChange> | StatChange[];
   statDiffs?: Record<string, StatChange> | StatChange[];
   passivesChanged?: PassivesChange;
@@ -317,7 +319,7 @@ function itemFromRow(row: CollectionRow<ItemChange>, side: "base" | "target"): I
   return (side === "base" ? row.base : row.target) ?? { slot: row.key ?? "Unknown slot" };
 }
 
-export function DiffView({ diff }: { diff: BuildCompareResult }) {
+export function DiffView({ diff, showStats = true }: { diff: BuildCompareResult; showStats?: boolean }) {
   const skillsAdded = [...asArray(diff.skillsAdded), ...backendRows(diff.skills, "added").map((row) => skillFromRow(row, "target"))];
   const skillsRemoved = [...asArray(diff.skillsRemoved), ...backendRows(diff.skills, "removed").map((row) => skillFromRow(row, "base"))];
   const skillsChangedRows = backendRows(diff.skills, "changed");
@@ -328,7 +330,7 @@ export function DiffView({ diff }: { diff: BuildCompareResult }) {
   const itemsChangedRows = backendRows(diff.items, "changed");
   const legacyItemsChanged = asArray(diff.itemsChanged);
 
-  const stats = normalizeStatRecords(diff);
+  const stats = showStats ? normalizeStatRecords(diff) : [];
   const passivesChanged = diff.passivesChanged ?? {};
   const nodesAdded = passivesChanged.nodesAdded ?? passivesChanged.added?.length ?? diff.passiveTree?.addedNodeIds?.length ?? 0;
   const nodesRemoved = passivesChanged.nodesRemoved ?? passivesChanged.removed?.length ?? diff.passiveTree?.removedNodeIds?.length ?? 0;
