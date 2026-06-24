@@ -5,7 +5,7 @@ import {
   parseBuildXml,
   isPobCode,
   decodePobCode,
-} from "../src/pob-parser.js";
+} from "@pobai/parser";
 
 const SAMPLE_XML = `<PathOfBuilding2>
   <Build characterName="Smoke Twister" className="Ranger" ascendClassName="Deadeye" level="72" />

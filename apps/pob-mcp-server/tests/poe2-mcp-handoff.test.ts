@@ -9,7 +9,7 @@
  *                                        → [poe2-mcp] analyze_passive_tree(node_ids)
  */
 import { describe, it, expect } from "vitest";
-import { parseBuildXml } from "../src/pob-parser.js";
+import { parseBuildXml } from "@pobai/parser";
 
 const SAMPLE_XML = `<PathOfBuilding2>
   <Build characterName="Twister Deadeye" className="Ranger" ascendClassName="Deadeye" level="85" />

@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { parseBuild, isPobCode } from "./pob-parser.js";
+import { parseBuild, isPobCode } from "@pobai/parser";
 import { SnapshotStore } from "./snapshot-store.js";
 
 const store = new SnapshotStore();
@@ -100,7 +100,7 @@ server.tool(
       .describe("Human-readable label for this build"),
   },
   async ({ code, label }) => {
-    await store.init();
+
     const source = isPobCode(code) ? "pob-code" : "pob-xml";
     const { xml, summary } = parseBuild(code);
     const snapshot = await store.save(xml, summary, label, source);
@@ -133,7 +133,7 @@ server.tool(
   "List all PoB2 builds imported in this session.",
   {},
   async () => {
-    await store.init();
+
     const snapshots = store.list().map((s) => ({
       snapshot_id: s.id,
       label: s.label,
@@ -164,7 +164,7 @@ server.tool(
       .describe("The snapshot_id returned by import_pob_build"),
   },
   async ({ snapshot_id }) => {
-    await store.init();
+
     const snapshot = store.get(snapshot_id);
     if (!snapshot) {
       return {
@@ -210,7 +210,7 @@ server.tool(
       .describe("The snapshot_id returned by import_pob_build"),
   },
   async ({ snapshot_id }) => {
-    await store.init();
+
     const snapshot = store.get(snapshot_id);
     if (!snapshot) {
       return {
@@ -255,7 +255,7 @@ server.tool(
       ),
   },
   async ({ snapshot_id, slot }) => {
-    await store.init();
+
     const snapshot = store.get(snapshot_id);
     if (!snapshot) {
       return {
@@ -291,7 +291,7 @@ server.tool(
       .describe("The snapshot_id returned by import_pob_build"),
   },
   async ({ snapshot_id }) => {
-    await store.init();
+
     const snapshot = store.get(snapshot_id);
     if (!snapshot) {
       return {
@@ -322,7 +322,7 @@ server.tool(
       .describe("The snapshot_id returned by import_pob_build"),
   },
   async ({ snapshot_id }) => {
-    await store.init();
+
     const snapshot = store.get(snapshot_id);
     if (!snapshot) {
       return {
@@ -362,7 +362,7 @@ server.tool(
     snapshot_id: z.string().describe("The snapshot_id to delete"),
   },
   async ({ snapshot_id }) => {
-    await store.init();
+
     const deleted = await store.delete(snapshot_id);
     return {
       content: [

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BuildSummary } from "./pob-parser.js";
+import type { BuildSummary } from "@pobai/parser";
 
 export interface BuildSnapshot {
   id: string;

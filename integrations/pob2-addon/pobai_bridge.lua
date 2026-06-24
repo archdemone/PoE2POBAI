@@ -18,7 +18,6 @@ This patches:
 --]]
 
 local POBAI_BRIDGE_PORT = 22804
-local POBAI_SERVER = "http://localhost:3001"
 
 -- ============================================================
 -- JSON helpers (dkjson is bundled with PoB2)
@@ -314,53 +313,6 @@ function pobai_stop_listener()
     end
     print("PoBAI Bridge: listener stopped")
 end
-
--- ============================================================
--- Chat overlay (simple text input + response area)
--- ============================================================
-local pobai_chat_input = ""
-local pobai_chat_response = ""
-
-local function pobai_chat_send(message)
-    if not message or message == "" then return end
-    pobai_chat_response = "Sending..."
-
-    local jsonBody = json_encode({
-        model = "anthropic/claude-sonnet-4",
-        apiKey = "",
-        messages = {
-            { role = "user", content = message },
-        },
-    })
-
-    launch:DownloadPage(
-        POBAI_SERVER .. "/api/chat",
-        function(isSuccess, data)
-            if isSuccess then
-                local ok_parse, parsed = pcall(function()
-                    return require("dkjson").decode(data)
-                end)
-                if ok_parse and parsed and parsed.message then
-                    pobai_chat_response = parsed.message.content
-                else
-                    pobai_chat_response = "Parse error"
-                end
-            else
-                pobai_chat_response = "Server error: " .. tostring(data)
-            end
-        end,
-        { body = jsonBody, header = "Content-Type: application/json" }
-    )
-end
-
--- ============================================================
--- Controls (added to ImportTab)
--- ============================================================
--- Export via button (same as v1, keeps existing behavior)
--- controls.sendToPoBAI = new("ButtonControl", ...)
--- controls.pobaiChatInput = new("EditControl", ...)
--- controls.pobaiChatSend = new("ButtonControl", ...)
--- controls.pobaiChatResponse = new("EditControl", ...)
 
 -- ============================================================
 -- Exported API for the installer hook

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SnapshotStore } from "../src/snapshot-store.js";
-import { parseBuildXml } from "../src/pob-parser.js";
+import { parseBuildXml } from "@pobai/parser";
 
 const SAMPLE_XML = `<PathOfBuilding2>
   <Build className="Ranger" ascendClassName="Deadeye" level="80" />
@@ -65,6 +65,7 @@ describe("SnapshotStore.list", () => {
   it("returns all saved snapshots sorted newest-first", async () => {
     const summary = parseBuildXml(SAMPLE_XML);
     const a = await store.save(SAMPLE_XML, summary, "Build A");
+    await new Promise((r) => setTimeout(r, 2)); // ensure distinct ISO timestamps
     const b = await store.save(SAMPLE_XML, summary, "Build B");
     const list = store.list();
     expect(list).toHaveLength(2);
