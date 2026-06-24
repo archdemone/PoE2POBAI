@@ -3,6 +3,7 @@ export interface BuildInfo {
   label: string;
   source: string;
   created_at: string;
+  sourceInput?: string;
   character?: {
     name?: string;
     className?: string;

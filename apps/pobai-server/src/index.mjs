@@ -14,6 +14,8 @@ const port = Number(process.env.PORT ?? process.env.POBAI_SERVER_PORT ?? 3001);
 const host = process.env.POBAI_SERVER_HOST ?? "0.0.0.0";
 const openRouterBaseUrl = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1";
 const POB2_BRIDGE_URL = process.env.POB2_BRIDGE_URL ?? "http://127.0.0.1:22804";
+const HF_MODEL = process.env.HF_MODEL ?? "meta-llama/Meta-Llama-3.1-8B-Instruct";
+const HF_BASE_URL = `https://api-inference.huggingface.co/models/${HF_MODEL}/v1`;
 
 const poe2Mcp = new Poe2McpClient();
 // Serve from docs/ (production build) when available, otherwise apps/pobai-web/ (dev)
@@ -80,11 +82,11 @@ async function deleteSnapshot(snapshotId) {
   }
 }
 
-function createSnapshotFromXml({ source, label, xml, note }) {
+function createSnapshotFromXml({ source, label, xml, note, sourceInput }) {
   const hash = createHash("sha256").update(xml).digest("hex");
   const summary = parseBuild(xml).summary;
   if (note) summary.resolvedFrom = note;
-  return {
+  const snapshot = {
     id: randomUUID(),
     source,
     createdAt: new Date().toISOString(),
@@ -94,13 +96,15 @@ function createSnapshotFromXml({ source, label, xml, note }) {
     preview: xml.slice(0, 240),
     summary,
   };
+  if (sourceInput) snapshot.sourceInput = sourceInput;
+  return snapshot;
 }
 
 async function resolveSnapshotFromPayload({ source, label, payload, mcp = poe2Mcp }) {
   const rawPayload = payload.replace(/\r\n/g, "\n").trim();
   const resolved = await resolveToXml(rawPayload, { mcp });
   const xml = resolved.xml;
-  const snapshot = createSnapshotFromXml({ source, label, xml, note: resolved.note });
+  const snapshot = createSnapshotFromXml({ source, label, xml, note: resolved.note, sourceInput: rawPayload });
   return { snapshot, xml };
 }
 
@@ -1334,6 +1338,42 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  if (request.method === "POST" && /^\/api\/build\/[^/]+\/refresh$/.test(url.pathname)) {
+    const snapshotId = url.pathname.split("/")[3];
+    const snapshot = snapshots.get(snapshotId);
+    if (!snapshot) { sendJson(response, 404, { error: "Snapshot not found" }); return; }
+    if (!snapshot.sourceInput) {
+      sendJson(response, 400, { error: "No source URL stored for this build. Re-import it to enable refresh." });
+      return;
+    }
+    try {
+      const resolved = await resolveToXml(snapshot.sourceInput, { mcp: poe2Mcp });
+      const xml = resolved.xml;
+      const hash = createHash("sha256").update(xml).digest("hex");
+      if (hash === snapshot.hash) {
+        sendJson(response, 200, { snapshot, changed: false });
+        return;
+      }
+      const summary = parseBuild(xml).summary;
+      if (resolved.note) summary.resolvedFrom = resolved.note;
+      const updated = {
+        ...snapshot,
+        hash,
+        sizeBytes: Buffer.byteLength(xml, "utf8"),
+        preview: xml.slice(0, 240),
+        summary,
+        refreshedAt: new Date().toISOString(),
+      };
+      snapshots.set(snapshotId, updated);
+      payloads.set(snapshotId, xml);
+      await persistSnapshot(updated, xml);
+      sendJson(response, 200, { snapshot: updated, changed: true });
+    } catch (err) {
+      sendJson(response, 500, { error: err instanceof Error ? err.message : "Refresh failed" });
+    }
+    return;
+  }
+
   if (request.method === "POST" && url.pathname === "/api/chat") {
     const body = await readJson(request);
     const error = validateChatPayload(body);
@@ -1344,32 +1384,18 @@ async function handleApi(request, response, url) {
 
     const latestUserMessage = [...body.messages].reverse().find((m) => m.role === "user")?.content ?? "";
 
-    // Demo mode — no API key: execute tools directly and return formatted response
-    if (!body.apiKey || !body.apiKey.trim()) {
-      const snapshot = body.snapshotId ? snapshots.get(body.snapshotId) : undefined;
-      const toolTrace = [];
-      if (snapshot) {
-        const defResult = await executeTool("get_defenses", { snapshot_id: snapshot.id });
-        toolTrace.push({ tool: "get_defenses", args: { snapshot_id: snapshot.id }, result: defResult });
-        const skillResult = await executeTool("get_skills", { snapshot_id: snapshot.id });
-        toolTrace.push({ tool: "get_skills", args: { snapshot_id: snapshot.id }, result: skillResult });
-      } else {
-        const listResult = await executeTool("list_builds", {});
-        toolTrace.push({ tool: "list_builds", args: {}, result: listResult });
-      }
-      sendJson(response, 200, {
-        message: {
-          id: randomUUID(),
-          role: "assistant",
-          createdAt: new Date().toISOString(),
-          content: buildLocalDemoResponse(snapshot, latestUserMessage),
-          toolTrace,
-        },
-      });
-      return;
+    // Determine LLM provider: use HuggingFace free tier when no API key is supplied
+    const useFreeTier = !body.apiKey || !body.apiKey.trim();
+    const llmBaseUrl = useFreeTier ? HF_BASE_URL : openRouterBaseUrl;
+    const llmModel = useFreeTier ? HF_MODEL : body.model;
+    const llmHeaders = { "Content-Type": "application/json" };
+    if (!useFreeTier) {
+      llmHeaders["Authorization"] = `Bearer ${body.apiKey}`;
+      llmHeaders["HTTP-Referer"] = process.env.OPENROUTER_HTTP_REFERER ?? `http://localhost:${port}`;
+      llmHeaders["X-Title"] = "PoBAI";
     }
 
-    // Live mode — tool-use loop with the configured LLM
+    // Tool-use loop with the configured LLM
     let pob2BridgeConnected = false;
     try {
       const res = await fetch(`${POB2_BRIDGE_URL}/api`, {
@@ -1440,16 +1466,11 @@ async function handleApi(request, response, url) {
     while (remainingIter-- > 0) {
       let llmResponse;
       try {
-        llmResponse = await fetch(`${openRouterBaseUrl}/chat/completions`, {
+        llmResponse = await fetch(`${llmBaseUrl}/chat/completions`, {
           method: "POST",
-          headers: {
-            "Authorization": `Bearer ${body.apiKey}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER ?? `http://localhost:${port}`,
-            "X-Title": "PoBAI",
-          },
+          headers: llmHeaders,
           body: JSON.stringify({
-            model: body.model,
+            model: llmModel,
             messages: conversationMessages,
             tools: getToolDefinitions(),
             tool_choice: "auto",
@@ -1457,6 +1478,14 @@ async function handleApi(request, response, url) {
         });
       } catch (fetchError) {
         sendJson(response, 502, { error: "Could not reach LLM API", detail: fetchError instanceof Error ? fetchError.message : String(fetchError) });
+        return;
+      }
+
+      if (llmResponse.status === 429) {
+        sendJson(response, 429, {
+          error: "Free tier rate limited. Sign up at openrouter.ai for a free account and enter your key in Settings.",
+          rateLimited: true,
+        });
         return;
       }
 

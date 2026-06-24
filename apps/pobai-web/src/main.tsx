@@ -12,7 +12,8 @@ import { readErrorMessage } from "./http";
 import "./styles.css";
 
 const apiBaseUrl = import.meta.env.VITE_POBAI_API_URL ?? "http://localhost:3001";
-const defaultModel = import.meta.env.VITE_POBAI_MODEL ?? "openai/gpt-4o-mini";
+const HF_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct";
+const defaultModel = import.meta.env.VITE_POBAI_MODEL ?? HF_MODEL;
 
 const API_KEY_STORAGE = "pobai.apiKey";
 const MODEL_STORAGE = "pobai.model";
@@ -32,6 +33,7 @@ interface ChatResponse {
   };
   content?: string;
   error?: string;
+  rateLimited?: boolean;
 }
 
 interface ToolTraceEntry {
@@ -62,6 +64,12 @@ interface Pob2ExportResponse {
   buildName?: unknown;
   name?: unknown;
   error?: unknown;
+}
+
+interface RefreshResponse {
+  snapshot?: BuildInfo;
+  changed?: boolean;
+  error?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -104,6 +112,11 @@ export function App() {
   const [chatPending, setChatPending] = useState(false);
   const [apiKey, setApiKey] = useState(() => readStorage(API_KEY_STORAGE, ""));
   const [model, setModel] = useState(() => readStorage(MODEL_STORAGE, defaultModel));
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [rateLimitBanner, setRateLimitBanner] = useState(false);
+
+  const freeTier = !apiKey || !apiKey.trim();
+  const modelHint = freeTier ? "Llama 3.1" : model.split("/").pop() ?? model;
 
   function handleSaveSettings(nextKey: string, nextModel: string) {
     setApiKey(nextKey);
@@ -129,7 +142,7 @@ export function App() {
       const nextBuilds = Array.isArray(data) ? data : [];
       setBuilds(nextBuilds);
       setActiveBuildId((current) => {
-        if (current && nextBuilds.some((build) => build.snapshot_id === current)) return current;
+        if (current && nextBuilds.some((b: BuildInfo) => b.snapshot_id === current)) return current;
         return selectInitialBuild(nextBuilds);
       });
     } catch {}
@@ -179,9 +192,7 @@ export function App() {
 
       const labelBase = typeof exported.buildName === "string"
         ? exported.buildName
-        : typeof exported.name === "string"
-          ? exported.name
-          : "Current PoB build";
+        : typeof exported.name === "string" ? exported.name : "Current PoB build";
       const snapshotId = await importBuild(payload, labelBase, xml ? "pob-xml" : "pob-code");
       await loadBuilds();
       if (snapshotId) setActiveBuildId(snapshotId);
@@ -191,6 +202,29 @@ export function App() {
       setStatus(e instanceof Error ? e.message : "Could not import current PoB build.");
     } finally {
       setImportingCurrent(false);
+    }
+  }
+
+  async function handleRefresh(id: string) {
+    setRefreshingId(id);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/build/${id}/refresh`, { method: "POST" });
+      if (!res.ok) {
+        const body = (await res.json()) as RefreshResponse;
+        setStatus(body.error ?? "Refresh failed");
+        return;
+      }
+      const body = (await res.json()) as RefreshResponse;
+      if (body.changed) {
+        await loadBuilds();
+        setStatus("Build refreshed with latest data.");
+      } else {
+        setStatus("Build is already up to date.");
+      }
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Refresh failed");
+    } finally {
+      setRefreshingId(null);
     }
   }
 
@@ -213,17 +247,28 @@ export function App() {
     setTools([]);
     setChatPending(true);
     setStatus("");
+    setRateLimitBanner(false);
     try {
       const res = await fetch(`${apiBaseUrl}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           apiKey,
-          model,
+          model: freeTier ? HF_MODEL : model,
           snapshotId: activeBuildId,
           messages: nextMessages,
         }),
       });
+
+      if (res.status === 429) {
+        const body = (await res.json()) as ChatResponse;
+        if (body.rateLimited) {
+          setRateLimitBanner(true);
+          setMessages((prev) => [...prev, { role: "assistant", content: body.error ?? "Rate limited. Please sign up for a free API key." }]);
+          return;
+        }
+      }
+
       if (!res.ok) throw new Error(await readErrorMessage(res));
       const body = (await res.json()) as ChatResponse;
       const content = body.message?.content ?? body.content ?? body.error ?? "";
@@ -236,40 +281,65 @@ export function App() {
     } finally {
       setChatPending(false);
     }
-  }, [activeBuildId, messages, apiKey, model]);
+  }, [activeBuildId, messages, apiKey, model, freeTier]);
+
+  const chatNode = (
+    <ChatPanel
+      messages={messages}
+      onSend={handleSend}
+      disabled={!activeBuildId || chatPending}
+      freeTier={freeTier}
+      modelHint={modelHint}
+    >
+      {rateLimitBanner && (
+        <div className="rate-limit-banner">
+          Free tier rate limit hit.{" "}
+          <button className="rate-limit-link" onClick={() => setSettingsOpen(true)}>
+            Add a free OpenRouter key
+          </button>{" "}
+          to continue.
+        </div>
+      )}
+      <ToolLoop tools={tools} />
+    </ChatPanel>
+  );
 
   return (
     <ErrorBoundary>
       <div className="app">
-        <BuildSidebar builds={builds} activeId={activeBuildId} onSelect={handleSelect} onDelete={handleDelete} onImport={() => setImportOpen(true)} />
+        <BuildSidebar
+          builds={builds}
+          activeId={activeBuildId}
+          onSelect={handleSelect}
+          onDelete={handleDelete}
+          onImport={() => setImportOpen(true)}
+          onRefresh={handleRefresh}
+          refreshingId={refreshingId}
+        />
         <div className="main-area">
           <div className="status-bar">
             <span>API: {apiBaseUrl}</span>
             <span className={apiStatus?.pob2Bridge?.connected ? "status-ok" : "status-warn"}>
               PoB bridge: {apiStatus?.pob2Bridge?.connected ? "connected" : "offline"}
             </span>
-            <span className={apiKey ? "status-ok" : "status-warn"}>
-              Chat: {apiKey ? `Live · ${model}` : "Demo mode"}
+            <span className={freeTier ? "status-free" : "status-ok"}>
+              Chat: {freeTier ? `Llama 3.1 · Free` : `Live · ${model}`}
             </span>
             <button className="btn-secondary status-settings-btn" onClick={() => setSettingsOpen(true)}>Settings</button>
-            {chatPending && <span>Sending...</span>}
-            {status && <span>{status}</span>}
+            {chatPending && <span>Sending…</span>}
+            {status && <span className="status-msg">{status}</span>}
           </div>
-          <div className="workspace-grid">
-            <BuildCompare
-              builds={builds}
-              activeBuildId={activeBuildId}
-              apiBaseUrl={apiBaseUrl}
-              pob2Connected={apiStatus?.pob2Bridge?.connected ?? false}
-              bridgeUrl={apiStatus?.pob2Bridge?.url}
-              importingCurrent={importingCurrent}
-              onImportCurrent={handleImportCurrentPob}
-              onOpenImport={() => setImportOpen(true)}
-            />
-            <ChatPanel messages={messages} onSend={handleSend} disabled={!activeBuildId || chatPending}>
-              <ToolLoop tools={tools} />
-            </ChatPanel>
-          </div>
+          <BuildCompare
+            builds={builds}
+            activeBuildId={activeBuildId}
+            apiBaseUrl={apiBaseUrl}
+            pob2Connected={apiStatus?.pob2Bridge?.connected ?? false}
+            bridgeUrl={apiStatus?.pob2Bridge?.url}
+            importingCurrent={importingCurrent}
+            onImportCurrent={handleImportCurrentPob}
+            onOpenImport={() => setImportOpen(true)}
+            chatNode={chatNode}
+          />
         </div>
         <ImportModal open={importOpen} onClose={() => setImportOpen(false)} onImport={handleImport} />
         <SettingsModal

@@ -7,9 +7,11 @@ interface BuildSidebarProps {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onImport: () => void;
+  onRefresh?: (id: string) => Promise<void>;
+  refreshingId?: string | null;
 }
 
-export function BuildSidebar({ builds, activeId, onSelect, onDelete, onImport }: BuildSidebarProps) {
+export function BuildSidebar({ builds, activeId, onSelect, onDelete, onImport, onRefresh, refreshingId }: BuildSidebarProps) {
   return (
     <div className="build-sidebar">
       <div className="build-sidebar-header">
@@ -20,9 +22,23 @@ export function BuildSidebar({ builds, activeId, onSelect, onDelete, onImport }:
         {builds.map((b) => (
           <div key={b.snapshot_id} className={`build-chip ${b.snapshot_id === activeId ? "active" : ""}`}
             onClick={() => onSelect(b.snapshot_id)}>
-            <div className="build-chip-label">{b.label}</div>
-            <div className="build-chip-meta">{b.character?.className} {b.character?.level}</div>
-            <button className="build-chip-delete" onClick={(e) => { e.stopPropagation(); onDelete(b.snapshot_id); }}>x</button>
+            <div className="build-chip-body">
+              <div className="build-chip-label">{b.label}</div>
+              <div className="build-chip-meta">{b.character?.className} {b.character?.level}</div>
+            </div>
+            <div className="build-chip-actions">
+              {onRefresh && b.sourceInput && (
+                <button
+                  className="build-chip-refresh"
+                  title="Re-fetch latest data"
+                  disabled={refreshingId === b.snapshot_id}
+                  onClick={(e) => { e.stopPropagation(); void onRefresh(b.snapshot_id); }}
+                >
+                  {refreshingId === b.snapshot_id ? "…" : "↻"}
+                </button>
+              )}
+              <button className="build-chip-delete" onClick={(e) => { e.stopPropagation(); onDelete(b.snapshot_id); }}>×</button>
+            </div>
           </div>
         ))}
         {builds.length === 0 && <div className="build-empty">No builds yet. Import one!</div>}
