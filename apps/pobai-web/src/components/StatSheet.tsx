@@ -30,6 +30,14 @@ type StatDef = {
 
 type Group = { title: string; icon: IconName; iconColor?: string; note?: string; wide?: boolean; stats: StatDef[] };
 
+function snapshotLabel(v: unknown, fallback: string): string {
+  if (typeof v === "object" && v !== null && "label" in v) {
+    const label = (v as Record<string, unknown>).label;
+    if (typeof label === "string" && label) return label;
+  }
+  return fallback;
+}
+
 const GROUPS: Group[] = [
   {
     title: "Attributes", icon: "stats",
@@ -131,8 +139,8 @@ export function StatSheet({ diff }: { diff: BuildCompareResult }) {
   const nodesAdd = diff.passiveTree?.addedNodeIds?.length ?? diff.passivesChanged?.nodesAdded ?? diff.passivesChanged?.added?.length ?? 0;
   const nodesDrop = diff.passiveTree?.removedNodeIds?.length ?? diff.passivesChanged?.nodesRemoved ?? diff.passivesChanged?.removed?.length ?? 0;
 
-  const baseName = (diff.base as any)?.label ?? "My build";
-  const targetName = (diff.target as any)?.label ?? "Target build";
+  const baseName = snapshotLabel(diff.base, "My build");
+  const targetName = snapshotLabel(diff.target, "Target build");
 
   function renderStat(s: StatDef) {
     const key = s.dps ? dpsKey : s.k;

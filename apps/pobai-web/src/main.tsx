@@ -8,6 +8,7 @@ import { ImportModal } from "./components/ImportModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import type { ApiStatus, ChatMessage, ToolCallState, BuildInfo } from "./types";
+import { readErrorMessage } from "./http";
 import "./styles.css";
 
 const apiBaseUrl = import.meta.env.VITE_POBAI_API_URL ?? "http://localhost:3001";
@@ -88,15 +89,6 @@ function isLikelyPlayerBuild(build: BuildInfo): boolean {
 
 function selectInitialBuild(builds: BuildInfo[]): string | null {
   return builds.find(isLikelyPlayerBuild)?.snapshot_id ?? builds[0]?.snapshot_id ?? null;
-}
-
-async function readErrorMessage(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as { error?: unknown; detail?: unknown };
-    if (typeof body.error === "string") return body.error;
-    if (typeof body.detail === "string") return body.detail;
-  } catch {}
-  return `Request failed with ${res.status}`;
 }
 
 export function App() {

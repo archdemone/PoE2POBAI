@@ -1,4 +1,5 @@
 import React from "react";
+import { asArray } from "../diff-utils";
 
 interface Gem {
   name?: string;
@@ -27,10 +28,6 @@ interface CollectionRow {
   base?: SkillChange | null;
   target?: SkillChange | null;
   gemDiff?: GemDiff;
-}
-
-function asArray<T>(value: T[] | undefined): T[] {
-  return Array.isArray(value) ? value : [];
 }
 
 function normKey(value: unknown): string {
@@ -73,14 +70,14 @@ function computeGemDiff(base: Gem[], target: Gem[]): GemDiff {
   const targetByKey = new Map(target.map((g) => [normKey(g.name), g]));
   const added: Gem[] = [];
   const removed: Gem[] = [];
-  const changed: GemDiff["changed"] = [];
+  const changed: NonNullable<GemDiff["changed"]> = [];
   for (const [key, gem] of targetByKey) if (!baseByKey.has(key)) added.push(gem);
   for (const [key, gem] of baseByKey) if (!targetByKey.has(key)) removed.push(gem);
   for (const [key, t] of targetByKey) {
     const b = baseByKey.get(key);
     if (!b) continue;
     if (String(b.level ?? "") !== String(t.level ?? "") || String(b.quality ?? "") !== String(t.quality ?? "")) {
-      changed!.push({ name: t.name, base: b, target: t });
+      changed.push({ name: t.name, base: b, target: t });
     }
   }
   return { added, removed, changed };

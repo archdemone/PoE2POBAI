@@ -754,51 +754,6 @@ function buildLocalDemoResponse(snapshot, latestUserMessage) {
   return sections.join("\n\n");
 }
 
-
-function classifyQuestion(question = "") {
-  const lower = question.toLowerCase();
-  if (lower.includes("defen") || lower.includes("surviv") || lower.includes("ehp") || lower.includes("resist") || lower.includes("mitigation")) return "defense";
-  if (lower.includes("twister") || lower.includes("trinity") || lower.includes("damage") || lower.includes("fire") || lower.includes("cold") || lower.includes("lightning")) return "skill_damage";
-  if (lower.includes("support") || lower.includes("gem")) return "gem_support";
-  if (lower.includes("item") || lower.includes("weapon") || lower.includes("gear")) return "item";
-  if (lower.includes("passive") || lower.includes("tree") || lower.includes("node")) return "passive_tree";
-  return "general";
-}
-
-function buildEvidence(snapshot, question = "") {
-  if (!snapshot) {
-    return {
-      questionType: classifyQuestion(question),
-      extracted: [],
-      unavailable: ["No snapshot selected"],
-      warnings: [],
-    };
-  }
-
-  const extracted = [];
-  const unavailable = [
-    "Exact DPS and elemental damage split",
-    "Exact eHP and mitigation calculations",
-    "Support compatibility validation",
-    "Passive/item what-if simulation",
-  ];
-
-  const character = Object.entries(snapshot.summary.character).filter(([, value]) => value);
-  if (character.length) extracted.push(`Character: ${character.map(([key, value]) => `${key}=${value}`).join(", ")}`);
-  if (snapshot.summary.skills.length) extracted.push(`Skill groups parsed: ${snapshot.summary.skills.length}`);
-  if (snapshot.summary.items.length) extracted.push(`Items parsed: ${snapshot.summary.items.length}`);
-  if (Object.keys(snapshot.summary.defenses).length) extracted.push(`Defense-like stats: ${Object.entries(snapshot.summary.defenses).map(([key, value]) => `${key}=${value}`).join(", ")}`);
-  if (snapshot.summary.passiveTree.allocatedNodeCount) extracted.push(`Passive nodes parsed: ${snapshot.summary.passiveTree.allocatedNodeCount}`);
-  if (snapshot.summary.detectedTerms.length) extracted.push(`Detected terms: ${snapshot.summary.detectedTerms.join(", ")}`);
-
-  return {
-    questionType: classifyQuestion(question),
-    extracted,
-    unavailable,
-    warnings: snapshot.summary.warnings,
-  };
-}
-
 const LOCAL_TOOL_NAMES = new Set([
   "list_builds", "get_build_summary", "get_skills",
   "get_items", "get_defenses", "get_passive_tree",

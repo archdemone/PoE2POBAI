@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { DiffView, type BuildCompareResult } from "./DiffView";
 import { StatSheet } from "./StatSheet";
 import type { BuildInfo } from "../types";
+import { readErrorMessage } from "../http";
 
 interface BuildCompareProps {
   builds: BuildInfo[];
@@ -23,15 +24,6 @@ function buildLabel(build: BuildInfo | undefined): string {
     build.character?.level ? `level ${build.character.level}` : "",
   ].filter(Boolean);
   return bits.join(" - ");
-}
-
-async function readErrorMessage(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as { error?: unknown; detail?: unknown };
-    if (typeof body.error === "string") return body.error;
-    if (typeof body.detail === "string") return body.detail;
-  } catch {}
-  return `Compare failed with ${res.status}`;
 }
 
 export function BuildCompare({
