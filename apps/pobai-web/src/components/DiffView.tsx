@@ -1,4 +1,7 @@
 import React from "react";
+import { SkillChangeRow } from "./SkillDiff";
+import { ItemChangeRow } from "./ItemDiff";
+import { NodeGroups } from "./PassiveDiff";
 
 interface Gem {
   name?: string;
@@ -241,92 +244,27 @@ function formatDelta(change: StatChange): string {
   return "";
 }
 
-function skillLabel(skill: SkillChange): string {
-  return skill.label ?? skill.name ?? "Unknown skill";
-}
-
-function gemName(gem: string | Gem | undefined): string {
-  if (!gem) return "Gem";
-  if (typeof gem === "string") return gem;
-  return gem.name ?? "Gem";
-}
-
-function gemMeta(gem: string | Gem | undefined): string {
-  if (!gem || typeof gem === "string") return "";
-  const bits: string[] = [];
-  if (gem.level !== undefined && gem.level !== null && gem.level !== "") bits.push(`L${gem.level}`);
-  if (gem.quality !== undefined && gem.quality !== null && gem.quality !== "" && String(gem.quality) !== "0") bits.push(`Q${gem.quality}`);
-  return bits.length ? ` (${bits.join(" / ")})` : "";
-}
-
-function gemText(gem: string | Gem | undefined): string {
-  return `${gemName(gem)}${gemMeta(gem)}`;
-}
-
-function skillGems(skill: SkillChange | string | null | undefined): Gem[] {
-  if (!skill || typeof skill === "string") return [];
-  return asArray(skill.gems).map((gem) => (typeof gem === "string" ? { name: gem } : gem));
-}
-
-function normKey(value: unknown): string {
-  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
-// Client-side gem diff used when the backend didn't attach one (legacy shape / tests).
-function computeGemDiff(base: Gem[], target: Gem[]): GemDiff {
-  const baseByKey = new Map(base.map((g) => [normKey(g.name), g]));
-  const targetByKey = new Map(target.map((g) => [normKey(g.name), g]));
-  const added: Gem[] = [];
-  const removed: Gem[] = [];
-  const changed: GemDiff["changed"] = [];
-  for (const [key, gem] of targetByKey) if (!baseByKey.has(key)) added.push(gem);
-  for (const [key, gem] of baseByKey) if (!targetByKey.has(key)) removed.push(gem);
-  for (const [key, t] of targetByKey) {
-    const b = baseByKey.get(key);
-    if (!b) continue;
-    if (String(b.level ?? "") !== String(t.level ?? "") || String(b.quality ?? "") !== String(t.quality ?? "")) {
-      changed!.push({ name: t.name, base: b, target: t });
-    }
-  }
-  return { added, removed, changed };
-}
-
-function gemDiffEmpty(diff: GemDiff | undefined): boolean {
-  if (!diff) return true;
-  return asArray(diff.added).length === 0 && asArray(diff.removed).length === 0 && asArray(diff.changed).length === 0;
-}
-
-function itemTitle(item: ItemChange | string | null | undefined, fallbackSlot?: string): string {
-  if (!item) return fallbackSlot ?? "Item";
-  if (typeof item === "string") return item;
-  return [item.slot, item.name].filter(Boolean).join(": ") || item.typeLine || fallbackSlot || "Item";
-}
-
-function itemSubtitle(item: ItemChange | string | null | undefined): string {
-  if (!item || typeof item === "string") return "";
-  return [item.name, item.typeLine].filter(Boolean).join(" - ");
-}
-
 function backendRows<T>(comparison: CollectionComparison<T> | undefined, status: CollectionRow<T>["status"]): Array<CollectionRow<T>> {
   return asArray(comparison?.rows).filter((row) => row.status === status);
 }
 
-function skillFromRow(row: CollectionRow<SkillChange>, side: "base" | "target"): SkillChange {
-  return (side === "base" ? row.base : row.target) ?? { label: row.key ?? "Unknown skill" };
+function skillLabel(skill: SkillChange): string {
+  return skill.label ?? skill.name ?? "Unknown skill";
 }
 
-function itemFromRow(row: CollectionRow<ItemChange>, side: "base" | "target"): ItemChange {
-  return (side === "base" ? row.base : row.target) ?? { slot: row.key ?? "Unknown slot" };
+function skillGems(skill: SkillChange | null | undefined): Gem[] {
+  if (!skill) return [];
+  return asArray(skill.gems).map((gem) => (typeof gem === "string" ? { name: gem } : gem));
 }
 
 export function DiffView({ diff, showStats = true }: { diff: BuildCompareResult; showStats?: boolean }) {
-  const skillsAdded = [...asArray(diff.skillsAdded), ...backendRows(diff.skills, "added").map((row) => skillFromRow(row, "target"))];
-  const skillsRemoved = [...asArray(diff.skillsRemoved), ...backendRows(diff.skills, "removed").map((row) => skillFromRow(row, "base"))];
+  const skillsAdded = [...asArray(diff.skillsAdded), ...backendRows(diff.skills, "added").map((row) => row.target ?? { label: row.key ?? "Unknown skill" })];
+  const skillsRemoved = [...asArray(diff.skillsRemoved), ...backendRows(diff.skills, "removed").map((row) => row.base ?? { label: row.key ?? "Unknown skill" })];
   const skillsChangedRows = backendRows(diff.skills, "changed");
   const legacySkillsChanged = asArray(diff.skillsChanged);
 
-  const itemsAdded = [...asArray(diff.itemsAdded), ...backendRows(diff.items, "added").map((row) => itemFromRow(row, "target"))];
-  const itemsRemoved = [...asArray(diff.itemsRemoved), ...backendRows(diff.items, "removed").map((row) => itemFromRow(row, "base"))];
+  const itemsAdded = [...asArray(diff.itemsAdded), ...backendRows(diff.items, "added").map((row) => row.target ?? { slot: row.key ?? "Unknown slot" })];
+  const itemsRemoved = [...asArray(diff.itemsRemoved), ...backendRows(diff.items, "removed").map((row) => row.base ?? { slot: row.key ?? "Unknown slot" })];
   const itemsChangedRows = backendRows(diff.items, "changed");
   const legacyItemsChanged = asArray(diff.itemsChanged);
 
@@ -395,7 +333,7 @@ export function DiffView({ diff, showStats = true }: { diff: BuildCompareResult;
           {skillsRemoved.map((skill, i) => (
             <div key={`${skillLabel(skill)}-${i}`} className="diff-item diff-item-removed">
               <span className="diff-item-label">{skillLabel(skill)}</span>
-              {skillGems(skill).length > 0 && <span className="diff-item-detail">{skillGems(skill).map(gemText).join(", ")}</span>}
+              {skillGems(skill).length > 0 && <span className="diff-item-detail">{skillGems(skill).map((g) => `${g.name ?? "Gem"}`).join(", ")}</span>}
             </div>
           ))}
         </div>
@@ -407,7 +345,7 @@ export function DiffView({ diff, showStats = true }: { diff: BuildCompareResult;
           {skillsAdded.map((skill, i) => (
             <div key={`${skillLabel(skill)}-${i}`} className="diff-item diff-item-added">
               <span className="diff-item-label">{skillLabel(skill)}</span>
-              {skillGems(skill).length > 0 && <span className="diff-item-detail">{skillGems(skill).map(gemText).join(", ")}</span>}
+              {skillGems(skill).length > 0 && <span className="diff-item-detail">{skillGems(skill).map((g) => `${g.name ?? "Gem"}`).join(", ")}</span>}
             </div>
           ))}
         </div>
@@ -432,9 +370,11 @@ export function DiffView({ diff, showStats = true }: { diff: BuildCompareResult;
         <div className="diff-section">
           <h4 className="diff-heading diff-heading-removed">Items only in my build ({itemsRemoved.length})</h4>
           {itemsRemoved.map((item, i) => (
-            <div key={`${itemTitle(item)}-${i}`} className="diff-item diff-item-removed">
-              <span className="diff-item-label">{itemTitle(item)}</span>
-              {itemSubtitle(item) && <span className="diff-item-detail">{itemSubtitle(item)}</span>}
+            <div key={`${item.slot ?? item.name ?? i}`} className="diff-item diff-item-removed">
+              <span className="diff-item-label">{[item.slot, item.name].filter(Boolean).join(": ") || item.typeLine || "Item"}</span>
+              {[item.name, item.typeLine].filter(Boolean).join(" - ") && (
+                <span className="diff-item-detail">{[item.name, item.typeLine].filter(Boolean).join(" - ")}</span>
+              )}
             </div>
           ))}
         </div>
@@ -444,9 +384,11 @@ export function DiffView({ diff, showStats = true }: { diff: BuildCompareResult;
         <div className="diff-section">
           <h4 className="diff-heading diff-heading-added">Items to equip from target ({itemsAdded.length})</h4>
           {itemsAdded.map((item, i) => (
-            <div key={`${itemTitle(item)}-${i}`} className="diff-item diff-item-added">
-              <span className="diff-item-label">{itemTitle(item)}</span>
-              {itemSubtitle(item) && <span className="diff-item-detail">{itemSubtitle(item)}</span>}
+            <div key={`${item.slot ?? item.name ?? i}`} className="diff-item diff-item-added">
+              <span className="diff-item-label">{[item.slot, item.name].filter(Boolean).join(": ") || item.typeLine || "Item"}</span>
+              {[item.name, item.typeLine].filter(Boolean).join(" - ") && (
+                <span className="diff-item-detail">{[item.name, item.typeLine].filter(Boolean).join(" - ")}</span>
+              )}
             </div>
           ))}
         </div>
@@ -490,115 +432,6 @@ export function DiffView({ diff, showStats = true }: { diff: BuildCompareResult;
           )}
           {treeDataNote && <span className="diff-note">{treeDataNote}</span>}
         </div>
-      )}
-    </div>
-  );
-}
-
-function SkillChangeRow({ row }: { row: CollectionRow<SkillChange> }) {
-  const label = skillLabel(skillFromRow(row, "target"));
-  const baseGems = skillGems(row.base);
-  const targetGems = skillGems(row.target);
-  const gemDiff = !gemDiffEmpty(row.gemDiff) ? row.gemDiff! : computeGemDiff(baseGems, targetGems);
-  const added = asArray(gemDiff.added);
-  const removed = asArray(gemDiff.removed);
-  const changed = asArray(gemDiff.changed);
-
-  return (
-    <div className="diff-item diff-item-changed diff-item-block">
-      <span className="diff-item-label">{label}</span>
-      <div className="gem-diff">
-        {added.map((gem, i) => (
-          <span key={`a-${i}`} className="gem-pill gem-added">+ {gemText(gem)}</span>
-        ))}
-        {removed.map((gem, i) => (
-          <span key={`r-${i}`} className="gem-pill gem-removed">− {gemText(gem)}</span>
-        ))}
-        {changed.map((change, i) => (
-          <span key={`c-${i}`} className="gem-pill gem-changed">
-            {change.name ?? gemName(change.target)}: {gemMeta(change.base).trim() || "—"} → {gemMeta(change.target).trim() || "—"}
-          </span>
-        ))}
-        {added.length === 0 && removed.length === 0 && changed.length === 0 && (
-          <span className="diff-item-detail">{targetGems.map(gemText).join(", ") || "Adjust to match"}</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-const NODE_TYPE_LABELS: Record<TreeNode["type"], string> = {
-  keystone: "Keystones",
-  notable: "Notables",
-  mastery: "Masteries",
-  ascendancy: "Ascendancy",
-  jewel: "Jewel sockets",
-  small: "Small passives",
-  unknown: "Other nodes",
-};
-const NODE_TYPE_ORDER: TreeNode["type"][] = ["keystone", "notable", "mastery", "ascendancy", "jewel", "small", "unknown"];
-
-function NodeGroups({ title, tone, desc }: { title: string; tone: "added" | "removed"; desc?: NodeDescription }) {
-  const groups = desc?.groups;
-  if (!groups || Object.keys(groups).length === 0) return null;
-  const sign = tone === "added" ? "+" : "−";
-  return (
-    <div className="node-groups">
-      <h5 className={`node-groups-title gem-${tone}`}>{title}</h5>
-      {NODE_TYPE_ORDER.filter((type) => groups[type]?.length).map((type) => (
-        <div key={type} className="node-group">
-          <span className="node-group-label">{NODE_TYPE_LABELS[type]} ({groups[type]!.length})</span>
-          <ul className="node-list">
-            {groups[type]!.map((node) => (
-              <li key={node.id} className={`node-row node-${type}`}>
-                <span className={`node-name gem-${tone}`}>{sign} {node.name}</span>
-                {node.stats && node.stats.length > 0 && (
-                  <span className="node-stats">{node.stats.join(" · ")}</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ItemChangeRow({ row }: { row: CollectionRow<ItemChange> }) {
-  const title = itemTitle(row.target ?? row.base, row.key);
-  const itemDiff = row.itemDiff ?? {};
-  const props = asArray(itemDiff.properties);
-  const modsAdded = asArray(itemDiff.modsAdded);
-  const modsRemoved = asArray(itemDiff.modsRemoved);
-  const modsChanged = asArray(itemDiff.modsChanged);
-  const baseName = itemSubtitle(row.base);
-  const targetName = itemSubtitle(row.target);
-  const nothingGranular = props.length === 0 && modsAdded.length === 0 && modsRemoved.length === 0 && modsChanged.length === 0;
-
-  return (
-    <div className="diff-item diff-item-changed diff-item-block">
-      <span className="diff-item-label">{title}</span>
-      {(baseName || targetName) && baseName !== targetName && (
-        <span className="diff-item-detail">{baseName || "(none)"} → {targetName || "(none)"}</span>
-      )}
-      {props.length > 0 && (
-        <div className="mod-diff">
-          {props.map((prop, i) => (
-            <span key={`p-${i}`} className={`mod-pill stat-${statTone(prop)}`}>
-              {prop.label}: {displayValue(prop.baseValue ?? prop.baseRaw ?? prop.base)} → {displayValue(prop.targetValue ?? prop.targetRaw ?? prop.target)}
-            </span>
-          ))}
-        </div>
-      )}
-      {(modsAdded.length > 0 || modsRemoved.length > 0 || modsChanged.length > 0) && (
-        <div className="mod-diff">
-          {modsAdded.map((mod, i) => <span key={`ma-${i}`} className="mod-pill gem-added">+ {mod}</span>)}
-          {modsChanged.map((mod, i) => <span key={`mc-${i}`} className="mod-pill gem-changed">{mod.from} → {mod.to}</span>)}
-          {modsRemoved.map((mod, i) => <span key={`mr-${i}`} className="mod-pill gem-removed">− {mod}</span>)}
-        </div>
-      )}
-      {nothingGranular && !baseName && !targetName && (
-        <span className="diff-item-detail">Swap to match the build you're copying.</span>
       )}
     </div>
   );
